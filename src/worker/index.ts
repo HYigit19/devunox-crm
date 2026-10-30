@@ -5,6 +5,8 @@ import { crmRoutes } from './crm';
 import { quoteRoutes } from './quotes';
 import { campaignRoutes } from './campaigns';
 import { rfqRoutes, techRoutes } from './rfq';
+import { taskRoutes, projectRoutes, docRoutes } from './work';
+import { reviewHook } from './review';
 import { runAgent } from './ai';
 import { getAccessToken, upcomingEvents, GoogleError } from './google';
 
@@ -17,6 +19,7 @@ app.onError((err, c) => {
 });
 
 app.route('/auth', authRoutes);
+app.route('/hooks', reviewHook);
 
 // ---------- Öffentliche Abmeldung (List-Unsubscribe, One-Click) ----------
 async function unsubscribe(env: Env, token: string) {
@@ -69,15 +72,14 @@ api.put('/settings', async (c) => {
 
 api.get('/dashboard', async (c) => {
   const db = c.env.DB;
-  const [pipe, quotesOpen, quotesWon, quoteRate, tasks, agent, recent, stages] = await db.batch([
+  const [pipe, quotesOpen, quotesWon, quoteRate, tasks, agent, recent, stages, taskStats, projects, docs, due] = await db.batch([
     db.prepare(`SELECT COALESCE(SUM(value),0) AS total, COALESCE(SUM(value * probability / 100.0),0) AS weighted, COUNT(*) AS n FROM deals WHERE stage NOT IN ('won','lost')`),
     db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS sum FROM quotes WHERE status = 'sent'`),
     db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS sum FROM quotes WHERE status = 'accepted' AND decided_at >= date('now','start of year')`),
     db.prepare(`SELECT SUM(status = 'accepted') AS won, SUM(status = 'rejected') AS lost FROM quotes`),
     db.prepare(
-      `SELECT a.*, co.name AS company_name, TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name
-       FROM activities a LEFT JOIN companies co ON co.id = a.company_id LEFT JOIN contacts ct ON ct.id = a.contact_id
-       WHERE a.type = 'task' AND a.done = 0 ORDER BY a.due_at IS NULL, a.due_at LIMIT 12`,
+      `SELECT t.*, co.name AS company_name, p.name AS project_name FROM tasks t LEFT JOIN companies co ON co.id = t.company_id LEFT JOIN projects p ON p.id = t.project_id
+       WHERE t.status != 'done' ORDER BY t.unread DESC, t.due_at IS NULL, t.due_at, t.sort LIMIT 10`,
     ),
     db.prepare(
       `SELECT (SELECT COUNT(*) FROM campaign_messages WHERE sent_at >= datetime('now','start of day')) AS today,
@@ -93,6 +95,17 @@ api.get('/dashboard', async (c) => {
        ORDER BY a.created_at DESC LIMIT 10`,
     ),
     db.prepare(`SELECT stage, COUNT(*) AS n, COALESCE(SUM(value),0) AS sum FROM deals GROUP BY stage`),
+    db.prepare(`SELECT status, COUNT(*) AS n, SUM(source = 'review') AS review, SUM(unread) AS unread FROM tasks GROUP BY status`),
+    db.prepare(
+      `SELECT p.id, p.name, p.status, co.name AS company_name,
+         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS n_tasks,
+         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') AS n_done
+       FROM projects p LEFT JOIN companies co ON co.id = p.company_id WHERE p.status != 'done' ORDER BY p.updated_at DESC LIMIT 5`,
+    ),
+    db.prepare(
+      `SELECT d.id, d.name, d.mime, d.size, d.created_at, d.company_id, co.name AS company_name FROM documents d LEFT JOIN companies co ON co.id = d.company_id ORDER BY d.created_at DESC LIMIT 6`,
+    ),
+    db.prepare(`SELECT id, title, due_at, status FROM tasks WHERE due_at IS NOT NULL AND due_at >= date('now','start of month','-7 days') AND due_at < date('now','start of month','+2 months')`),
   ]);
   return c.json({
     pipeline: pipe.results[0],
@@ -103,6 +116,10 @@ api.get('/dashboard', async (c) => {
     agent: agent.results[0],
     recent: recent.results,
     stages: stages.results,
+    taskStats: taskStats.results,
+    projects: projects.results,
+    docs: docs.results,
+    due: due.results,
   });
 });
 
@@ -131,6 +148,9 @@ api.route('/', crmRoutes);
 api.route('/quotes', techRoutes);
 api.route('/quotes', quoteRoutes);
 api.route('/rfq', rfqRoutes);
+api.route('/tasks', taskRoutes);
+api.route('/projects', projectRoutes);
+api.route('/documents', docRoutes);
 api.route('/campaigns', campaignRoutes);
 
 app.route('/api', api);

@@ -4,6 +4,7 @@ import { renderQuotePdf, money } from './pdf';
 import { getAccessToken, sendMail, textToHtml, uploadToDrive, driveQuotesFolder } from './google';
 import { draftQuote } from './ai';
 import { buildTechPdf, loadTech } from './rfq';
+import { storeDocument } from './work';
 
 export const quoteRoutes = new Hono<AppEnv>();
 
@@ -314,6 +315,15 @@ quoteRoutes.post('/:id/send', async (c) => {
       /* Versand war erfolgreich – Drive-Fehler nicht blockierend */
     }
   }
+  // Versendete PDFs in der Dokumentenablage des Kunden ablegen (Ordner /Angebote/)
+  try {
+    if (quote.company_id) {
+      await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: filename, data: bytes, mime: 'application/pdf', source: 'quote', userId: user.id });
+      if (tech) await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: tech.filename, data: tech.bytes, mime: 'application/pdf', source: 'tech', userId: user.id });
+    }
+  } catch {
+    /* Ablage nicht kritisch */
+  }
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE quotes SET status = CASE WHEN status = 'draft' THEN 'sent' ELSE status END, sent_at = datetime('now') WHERE id = ?`).bind(id),
     c.env.DB.prepare(
@@ -329,4 +339,14 @@ quoteRoutes.post('/ai-draft', async (c) => {
   const { results: products } = await c.env.DB.prepare('SELECT * FROM products WHERE active = 1').all();
   const out = await draftQuote(c.env, { request: body.request, products, language: body.language || 'de', currency: body.currency || 'EUR', customer: body.customer });
   return c.json(out);
+});
+
+quoteRoutes.post('/:id/archive', async (c) => {
+  const id = c.req.param('id');
+  const { bytes, filename, quote } = await buildPdf(c.env, id);
+  if (!quote.company_id) return c.json({ error: 'Bitte zuerst eine Firma wählen.' }, 400);
+  await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: filename, data: bytes, mime: 'application/pdf', source: 'quote', userId: c.get('user').id });
+  const tech = await buildTechPdf(c.env, id);
+  if (tech) await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: tech.filename, data: tech.bytes, mime: 'application/pdf', source: 'tech', userId: c.get('user').id });
+  return c.json({ ok: true });
 });

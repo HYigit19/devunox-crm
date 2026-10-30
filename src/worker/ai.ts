@@ -234,15 +234,16 @@ async function checkReplies(env: Env) {
           e.id,
         ),
         env.DB.prepare(
-          `INSERT INTO activities (id, type, subject, body, contact_id, company_id, due_at, done, gmail_thread_id, created_by)
-           VALUES (?, 'task', ?, ?, ?, ?, datetime('now'), 0, ?, ?)`,
+          `INSERT INTO tasks (id, title, description, status, priority, contact_id, company_id, source, due_at, unread, created_by, assignee_id)
+           VALUES (?, ?, ?, 'todo', ?, ?, ?, 'agent', datetime('now'), 1, ?, ?)`,
         ).bind(
           uid(),
           `Antwort von ${[e.first_name, e.last_name].filter(Boolean).join(' ')} (${cls.category.replace('_', ' ')})`,
           `Kampagne: ${e.campaign_name}\n\n${cls.summary}\n\n${reply.text.slice(0, 1500)}`,
+          cls.category === 'interessiert' ? 'high' : 'medium',
           e.contact_id,
           e.company_id,
-          e.gmail_thread_id,
+          e.owner_id,
           e.owner_id,
         ),
         ...(optOut ? [env.DB.prepare(`UPDATE contacts SET consent = 'opt_out', consent_note = 'Per Antwort abgemeldet' WHERE id = ?`).bind(e.contact_id)] : []),

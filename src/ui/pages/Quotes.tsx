@@ -11,7 +11,7 @@ export function QuotesList() {
   const sum = (s: string) => (list || []).filter((q) => q.status === s).reduce((a, q) => a + q.total, 0);
   return (
     <>
-      <PageHead title="Angebote" sub={list ? `${list.length} Angebote` : ''} actions={<><button className="btn ai" onClick={() => go('/import')}>✦ Aus Excel erstellen</button><button className="btn primary" disabled={!!busy} onClick={create}>+ Angebot</button></>} />
+      <PageHead title="Angebote" sub={list ? `${list.length} Angebote` : ''} actions={<><button className="btn" onClick={() => go('/import')}>✦ Aus Excel erstellen</button><button className="btn accent" disabled={!!busy} onClick={create}>+ Angebot</button></>} />
       {!status && list && list.length > 0 && (
         <div className="grid k4" style={{ marginBottom: 16 }}>
           {(['draft', 'sent', 'accepted', 'rejected'] as const).map((s) => (
@@ -270,6 +270,18 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
               <dt>Google Drive</dt><dd>{q.drive_file_id ? <a href={`https://drive.google.com/file/d/${q.drive_file_id}/view`} target="_blank" rel="noreferrer">PDF öffnen</a> : '–'}</dd>
             </dl>
             <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>„Angenommen“ setzt einen verknüpften Deal automatisch auf „Gewonnen“.</p>
+          </div>
+          <div className="card">
+            <h2 style={{ marginBottom: 10 }}>Weiter</h2>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <button className="btn" disabled={!!busy || !q.company_id} onClick={() => run('pr', async () => {
+                if (dirty) await save(true);
+                const p = await api.post('/projects', { quote_id: id, tasks_from_quote: true });
+                go(`/projects/${p.id}`);
+              }, 'Projekt mit Aufgaben aus dem Angebot angelegt')}>Projekt + Aufgaben anlegen</button>
+              <button className="btn" disabled={!!busy || !q.company_id} onClick={() => run('ar', async () => { if (dirty) await save(true); await api.post(`/quotes/${id}/archive`); }, 'PDF in der Kundenablage unter „Angebote“ gespeichert')}>PDF in Kundenablage speichern</button>
+            </div>
+            <p className="muted" style={{ fontSize: 12, margin: '10px 0 0' }}>Beim Versand per Gmail werden die PDFs automatisch in der Ablage des Kunden gespeichert.</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn" onClick={dup}>Duplizieren</button>

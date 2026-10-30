@@ -4,6 +4,9 @@ import { Badge, COUNTRIES, Empty, Field, Modal, PageHead, QUOTE_STATUS, Spinner,
 import { Activities } from './shared';
 import { ContactForm } from './Contacts';
 import { DealForm } from './Pipeline';
+import { TaskBoard } from './Tasks';
+import { DocBrowser } from './Documents';
+import { ProjectCards, ProjectForm } from './Projects';
 
 export function CompanyForm({ initial, onClose, onSaved }: { initial?: any; onClose: () => void; onSaved: (c: any) => void }) {
   const { v, set } = useForm({
@@ -98,6 +101,9 @@ export function CompanyDetail({ id }: { id: string }) {
   const [edit, setEdit] = useState(false);
   const [newContact, setNewContact] = useState(false);
   const [newDeal, setNewDeal] = useState(false);
+  const [tab, setTab] = useState<'overview' | 'projects' | 'tasks' | 'docs'>('overview');
+  const [newProject, setNewProject] = useState(false);
+  const [projects, reloadProjects] = useLoad<any[]>(`/projects?company_id=${id}`);
   const { busy, run } = useAction();
   if (!c) return <Spinner />;
 
@@ -124,7 +130,21 @@ export function CompanyDetail({ id }: { id: string }) {
           </>
         }
       />
-      <div className="grid side">
+      <div className="tabs">
+        <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>Übersicht</button>
+        <button className={tab === 'projects' ? 'active' : ''} onClick={() => setTab('projects')}>Projekte <span className="n">{projects?.length ?? ''}</span></button>
+        <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Aufgaben</button>
+        <button className={tab === 'docs' ? 'active' : ''} onClick={() => setTab('docs')}>Dokumente</button>
+      </div>
+      {tab === 'projects' && (
+        <div className="stack">
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button className="btn primary" onClick={() => setNewProject(true)}>+ Projekt</button></div>
+          {projects && projects.length ? <ProjectCards list={projects} /> : <div className="card"><Empty title="Keine Projekte" text="Projekte bündeln Aufgaben, Review-Feedback und Dokumente." /></div>}
+        </div>
+      )}
+      {tab === 'tasks' && <TaskBoard filter={`company_id=${id}`} companyId={id} />}
+      {tab === 'docs' && <div className="card"><DocBrowser companyId={id} /></div>}
+      {tab === 'overview' && <div className="grid side">
         <div className="stack">
           <div className="card">
             <div className="card-head">
@@ -194,7 +214,8 @@ export function CompanyDetail({ id }: { id: string }) {
           </div>
           <button className="btn danger" onClick={() => confirmDel('Firma') && run('d', async () => { await api.del(`/companies/${id}`); go('/companies'); })}>Firma löschen</button>
         </div>
-      </div>
+      </div>}
+      {newProject && <ProjectForm initial={{ company_id: id }} onClose={() => setNewProject(false)} onSaved={() => reloadProjects()} />}
       {edit && <CompanyForm initial={c} onClose={() => setEdit(false)} onSaved={reload} />}
       {newContact && <ContactForm initial={{ company_id: id, country: c.country }} onClose={() => setNewContact(false)} onSaved={reload} />}
       {newDeal && <DealForm initial={{ company_id: id, contact_id: c.contacts[0]?.id }} onClose={() => setNewDeal(false)} onSaved={reload} />}

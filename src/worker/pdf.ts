@@ -1,4 +1,5 @@
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib';
+import { LOGO_PNG_B64, LOGO_RATIO } from './logo';
 
 export type DocItem = { pos: number; name: string; description?: string | null; qty: number; unit?: string | null; unit_price: number; discount_pct?: number | null; tax_rate?: number | null };
 
@@ -100,10 +101,31 @@ export function wrap(text: string, font: PDFFont, size: number, width: number): 
   return lines;
 }
 
-export const BLUE = rgb(0.11, 0.3, 0.85);
-export const DARK = rgb(0.12, 0.14, 0.2);
-export const GREY = rgb(0.42, 0.45, 0.52);
-export const LINE = rgb(0.86, 0.88, 0.92);
+// devunox AI Markenfarben
+export const ORANGE = rgb(1, 0.353, 0.122); // #FF5A1F
+export const RUST = rgb(0.584, 0.227, 0.106); // #953A1B
+export const BLUE = ORANGE; // Akzentfarbe (Name aus älterer Version)
+export const DARK = rgb(0.078, 0.078, 0.09); // #141417
+export const GREY = rgb(0.45, 0.45, 0.5);
+export const LINE = rgb(0.9, 0.9, 0.92);
+export const SOFT = rgb(0.957, 0.957, 0.965); // #F4F4F6
+
+export async function embedLogo(pdf: PDFDocument): Promise<PDFImage> {
+  const bin = atob(LOGO_PNG_B64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return pdf.embedPng(bytes);
+}
+
+/** Kopfzeile im devunox-AI-Stil: Logo links, dunkler Balken mit orangem Akzent oben */
+export function drawBrandHeader(page: PDFPage, logo: PDFImage, W: number, H: number, M: number, logoWidth = 140) {
+  page.drawRectangle({ x: 0, y: H - 8, width: W, height: 8, color: DARK });
+  page.drawRectangle({ x: 0, y: H - 8, width: 150, height: 8, color: ORANGE });
+  page.drawRectangle({ x: 150, y: H - 8, width: 70, height: 8, color: RUST });
+  const h = logoWidth * LOGO_RATIO;
+  page.drawImage(logo, { x: M - 2, y: H - 40 - h, width: logoWidth, height: h });
+  return H - 40 - h;
+}
 
 export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   const t = L[d.language] || L.de;
@@ -113,7 +135,7 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const W = 595.28, H = 841.89, M = 56, CW = W - 2 * M;
-  const FOOT = 92;
+  const FOOT = 78;
   let page!: PDFPage;
   let y = 0;
   const pages: PDFPage[] = [];
@@ -127,14 +149,14 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   };
 
   const s = d.seller;
+  const logo = await embedLogo(pdf);
   const newPage = () => {
     page = pdf.addPage([W, H]);
     pages.push(page);
-    page.drawRectangle({ x: 0, y: H - 6, width: W, height: 6, color: BLUE });
-    text(s.company_name || 'Devunox Solutions', M, H - 52, { size: 16, f: bold, color: BLUE });
+    drawBrandHeader(page, logo, W, H, M, 150);
     const right = [s.company_website, s.company_email, s.company_phone].filter(Boolean);
-    right.forEach((r, i) => text(r, W - M, H - 40 - i * 11, { size: 8, color: GREY, align: 'right' }));
-    y = H - 90;
+    right.forEach((r, i) => text(r, W - M, H - 42 - i * 11, { size: 8, color: GREY, align: 'right' }));
+    y = H - 94;
   };
   const ensure = (h: number) => {
     if (y - h < FOOT + 10) newPage();
@@ -165,7 +187,9 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   });
   y = Math.min(yStart - buyerLines.length * 13, yStart - meta.length * 13) - 34;
 
-  text(`${t.quote} ${d.number}`, M, y, { size: 17, f: bold });
+  text(`${t.quote} ${d.number}`, M, y, { size: 20, f: bold });
+  page.drawRectangle({ x: M, y: y - 8, width: 34, height: 3, color: ORANGE });
+  y -= 8;
   y -= 18;
   if (d.title) {
     for (const l of wrap(d.title, font, 11, CW)) {
@@ -187,7 +211,8 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   const col = { pos: M, desc: M + 30, qty: M + CW - 190, price: M + CW - 85, total: M + CW };
   const descW = col.qty - col.desc - 50;
   const header = () => {
-    page.drawRectangle({ x: M - 6, y: y - 6, width: CW + 12, height: 20, color: rgb(0.95, 0.96, 0.99) });
+    page.drawRectangle({ x: M - 6, y: y - 6, width: CW + 12, height: 20, color: SOFT });
+    page.drawRectangle({ x: M - 6, y: y - 6, width: 3, height: 20, color: ORANGE });
     text(t.pos, col.pos, y, { size: 8.5, f: bold, color: GREY });
     text(t.desc, col.desc, y, { size: 8.5, f: bold, color: GREY });
     text(t.qty, col.qty, y, { size: 8.5, f: bold, color: GREY, align: 'right' });
@@ -236,8 +261,12 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   ensure(rows.length * 15 + 20);
   for (const [k, v, strong] of rows) {
     if (strong) {
-      page.drawLine({ start: { x: M + CW - 220, y: y + 11 }, end: { x: M + CW, y: y + 11 }, thickness: 1, color: DARK });
-      y -= 3;
+      y -= 8;
+      page.drawRectangle({ x: M + CW - 228, y: y - 7, width: 236, height: 21, color: DARK });
+      text(k, M + CW - 220, y, { size: 11, f: bold, color: rgb(1, 1, 1) });
+      text(v, M + CW, y, { size: 11, f: bold, color: ORANGE, align: 'right' });
+      y -= 22;
+      continue;
     }
     text(k, M + CW - 220, y, { size: strong ? 11 : 9.5, f: strong ? bold : font });
     text(v, M + CW, y, { size: strong ? 11 : 9.5, f: strong ? bold : font, align: 'right' });
@@ -257,7 +286,9 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   }
   if (note) y -= 8;
   if (d.outro) {
-    for (const l of wrap(d.outro, font, 10, CW)) {
+    const outroLines = wrap(d.outro, font, 10, CW);
+    ensure(Math.min(outroLines.length, 8) * 14);
+    for (const l of outroLines) {
       ensure(14);
       text(l, M, y, { size: 10 });
       y -= 14;

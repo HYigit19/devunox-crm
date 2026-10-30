@@ -10,7 +10,10 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   ANTHROPIC_BASE_URL?: string; // optional, z. B. für ein AI Gateway
   ENCRYPTION_KEY: string;      // beliebiger langer Zufallsstring
-  DEV_AUTH?: string;           // nur lokal: "1" erlaubt Login ohne Google
+  DEV_AUTH?: string;
+  DOCS: R2Bucket;               // Dokumentenablage (R2, EU)
+  REVIEW_URL?: string;          // z. B. https://project.review.devunox.ai
+  REVIEW_WEBHOOK_SECRET?: string; // gemeinsames Geheimnis mit devunox Review           // nur lokal: "1" erlaubt Login ohne Google
 }
 
 export type User = { id: string; email: string; name: string | null; picture: string | null };

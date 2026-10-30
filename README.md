@@ -1,10 +1,20 @@
-# Devunox CRM
+# devunox AI · CRM
 
-Angebote, CRM und KI-Vertriebsagent für Devunox. Läuft auf Cloudflare (Worker + D1) und nutzt Google Workspace und Claude.
+Angebote, CRM, Projekte, Aufgaben, Dokumentenablage und KI-Vertriebsagent – im devunox-AI-Design.
+Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claude. Adresse: **https://crm.devunox.ai**
 
 **Funktionen**
 
-- **CRM:** Firmen, Kontakte, Deal-Pipeline (Kanban), Aktivitäten, Aufgaben und Follow-ups
+- **CRM:** Firmen, Kontakte, Deal-Pipeline (Kanban), Aktivitäten
+- **Projekte je Kunde:** Aufgaben-Board, Dokumente, Verknüpfung mit Angebot und devunox Review. Projekte lassen sich mit einem Klick aus einem Angebot anlegen; dabei werden die Anforderungen des technischen Angebots als Aufgaben übernommen.
+- **Aufgaben (To-dos):** Board und Liste mit vier Spalten: Offen, In Arbeit, Beim Kunden, Erledigt.
+  - Mit Priorität, Fälligkeit (optional im Google Kalender), Notizen und Verlauf.
+  - Quellen: manuell, aus Angeboten, KI-Agent (Antworten auf Kampagnen) und devunox Review (Kunden-Feedback).
+- **Dokumentenablage (wie Dropbox):** je Kunde und Projekt.
+  - Ordner anlegen, Dateien oder ganze Ordner per Drag & Drop hochladen.
+  - Verschieben (auch per Ziehen auf einen Ordner), Umbenennen, Tags, Suche, Mehrfachauswahl, Vorschau und Download.
+  - Speicher: Cloudflare R2 mit Jurisdiktion EU.
+  - Versendete Angebots-PDFs werden automatisch im Ordner „Angebote“ des Kunden abgelegt.
 - **CSV-Import** von Kontakten (LinkedIn Sales Navigator, Apollo.io, Excel)
 - **Angebote:** Positionen, Leistungskatalog, Rabatte, DE/EN, EUR/USD/PLN/CHF
   - Steuer-Varianten: Inland, Reverse Charge, Nicht-EU, ohne MwSt.
@@ -28,11 +38,38 @@ Angebote, CRM und KI-Vertriebsagent für Devunox. Läuft auf Cloudflare (Worker 
   - Bounces werden erkannt, Abmeldelink nach RFC 8058 (One-Click)
   - Rechtsschutz: Kontakte in EU/DACH/UK werden nur mit Einwilligung oder als Bestandskunde angeschrieben
 
+## devunox Review ↔ CRM
+
+So funktioniert die Verbindung:
+- Gibt ein Kunde in **devunox Review** (project.review.devunox.ai) Feedback, entsteht im CRM automatisch eine **Aufgabe** im passenden Projekt.
+  - Das Projekt wird über das Review-Kürzel zugeordnet und bei Bedarf samt Firma angelegt.
+  - Priorität und Kategorie werden übernommen.
+- Antwortet der Kunde in Review, landet die Antwort im Verlauf der Aufgabe und die Aufgabe wird als „neu“ markiert.
+- Öffnet der Kunde einen Punkt wieder, springt die Aufgabe zurück auf „Offen“, mit seiner Begründung.
+- Statuswechsel im CRM gehen an Review zurück:
+  - „In Arbeit“ → In Arbeit
+  - „Beim Kunden“ oder „Erledigt“ → **Bitte prüfen**. Eine Notiz geht dabei als Kommentar an den Kunden.
+  - Nimmt der Kunde in Review ab, wird die Aufgabe im CRM erledigt.
+- Interne Review-Aufgaben werden nicht übertragen.
+- Beide Seiten prüfen eine HMAC-Signatur mit gemeinsamem Geheimnis. Nachrichten, die älter als 5 Minuten sind, werden abgewiesen.
+
+**Einrichtung:** Einen langen Zufallswert als Secret in **beide** Worker eintragen:
+- im CRM-Worker als `REVIEW_WEBHOOK_SECRET`
+- im Review-Worker als `CRM_WEBHOOK_SECRET`
+
+Die Adressen stehen schon in den `wrangler.jsonc`:
+- `REVIEW_URL` im CRM
+- `CRM_WEBHOOK_URL` = `https://crm.devunox.ai/hooks/review` in Review
+
+Solange kein Secret gesetzt ist, passiert nichts.
+
 ## Einrichtung (einmalig, ca. 30 Minuten)
 
 ### 1. Cloudflare-Datenbank – bereits erledigt
 
-Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt. Beide Migrationen (0001, 0002) sind eingespielt. Ihre ID steht schon in `wrangler.jsonc`.
+Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt, alle Migrationen (0001–0003) sind eingespielt.
+Den R2-Speicher `devunox-crm-dokumente` (EU) legt das erste Deployment automatisch an. Falls das Build-Log einen Fehler dazu zeigt: Im Dashboard unter **R2 → Create bucket** den Namen `devunox-crm-dokumente` eintragen, *Location → Specify jurisdiction → EU* wählen und dann neu deployen.
+Die Adresse `crm.devunox.ai` richtet das Deployment ebenfalls ein (`routes` in `wrangler.jsonc`), weil devunox.ai im selben Cloudflare-Konto liegt. Ihre ID steht schon in `wrangler.jsonc`.
 
 ### 2. Code auf GitHub und mit Cloudflare verbinden
 
@@ -49,7 +86,7 @@ Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt. Beide Migration
 2. Unter **APIs & Dienste → Bibliothek** diese drei APIs aktivieren: **Gmail API**, **Google Calendar API** und **Google Drive API**.
 3. Unter **OAuth-Zustimmungsbildschirm** als Nutzertyp **Intern** wählen. Das geht nur mit Google Workspace und braucht keine Google-Prüfung.
 4. Unter **Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID** den Typ **Webanwendung** wählen.
-   - Autorisierte Weiterleitungs-URI: `https://<deine-worker-adresse>/auth/callback`
+   - Autorisierte Weiterleitungs-URI: `https://crm.devunox.ai/auth/callback`
    - Wenn du eine eigene Domain nutzt, trägst du deren Callback-URL zusätzlich ein.
 5. Notiere Client-ID und Clientschlüssel.
 
@@ -67,6 +104,7 @@ Im Worker unter **Settings → Variables and Secrets** diese Werte anlegen:
 | `GOOGLE_CLIENT_SECRET` | Secret | aus Schritt 3 |
 | `ANTHROPIC_API_KEY` | Secret | aus Schritt 4 |
 | `ENCRYPTION_KEY` | Secret | langer Zufallstext (mind. 40 Zeichen); danach nie mehr ändern |
+| `REVIEW_WEBHOOK_SECRET` | Secret | langer Zufallstext – derselbe Wert als `CRM_WEBHOOK_SECRET` im Review-Worker |
 | `ALLOWED_EMAILS` | Variable | steht schon in `wrangler.jsonc`: `yigit@devunox-consulting.com`. Weitere Adressen kommagetrennt, `@devunox-consulting.com` erlaubt die ganze Domain |
 
 Optional sind `AI_MODEL` (Standard `claude-sonnet-5-5`), `TIMEZONE` (Standard `Europe/Berlin`) und `APP_URL` (wird sonst automatisch erkannt).
@@ -108,7 +146,7 @@ Später neue Tabellen oder Spalten als `migrations/0002_….sql` anlegen und mit
 ## Aufbau
 
 ```
-src/worker/   API (Hono) – auth, crm, quotes, campaigns, ai (Agent + Cron), google, pdf
+src/worker/   API (Hono) – auth, crm, quotes, rfq (Excel→Angebot), work (Aufgaben, Projekte, Ablage), review (Webhook), campaigns, ai, google, pdf
 src/ui/       Oberfläche (React + Vite)
 migrations/   Datenbankschema (D1)
 ```

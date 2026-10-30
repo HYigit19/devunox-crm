@@ -1,5 +1,5 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib';
-import { BLUE, DARK, GREY, LINE, clean, fmtDate, wrap } from './pdf';
+import { BLUE, DARK, GREY, LINE, ORANGE, SOFT, clean, drawBrandHeader, embedLogo, fmtDate, wrap } from './pdf';
 
 export type TechRequirement = {
   ref: string;
@@ -90,13 +90,13 @@ export async function renderTechPdf(o: {
     const c = clean(str);
     page.drawText(c, { x: align === 'right' ? x - f.widthOfTextAtSize(c, size) : x, y: yy, size, font: f, color });
   };
+  const logo = await embedLogo(pdf);
   const newPage = () => {
     page = pdf.addPage([W, H]);
     pages.push(page);
-    page.drawRectangle({ x: 0, y: H - 6, width: W, height: 6, color: BLUE });
-    txt(s.company_name || 'Devunox', M, H - 40, 11, bold, BLUE);
-    txt(`${t.doc} · ${o.quoteNumber}`, W - M, H - 40, 8.5, font, GREY, 'right');
-    y = H - 72;
+    drawBrandHeader(page, logo, W, H, M, 110);
+    txt(`${t.doc} · ${o.quoteNumber}`, W - M, H - 50, 8.5, font, GREY, 'right');
+    y = H - 84;
   };
   const ensure = (h: number) => {
     if (y - h < FOOT + 14) newPage();
@@ -110,11 +110,12 @@ export async function renderTechPdf(o: {
     }
     y -= gap;
   };
-  const heading = (str: string, size = 13) => {
+  const heading = (str: string, size = 13.5) => {
     ensure(size + 40);
-    y -= 6;
-    txt(str, M, y, size, bold, DARK);
-    y -= size + 8;
+    y -= 8;
+    page.drawRectangle({ x: M, y: y - 2, width: 3.5, height: size + 2, color: ORANGE });
+    txt(str, M + 11, y, size, bold, DARK);
+    y -= size + 10;
   };
   const sub = (str: string) => {
     ensure(30);
@@ -125,7 +126,7 @@ export async function renderTechPdf(o: {
     for (const b of list || []) {
       const lines = wrap(b, font, 10, CW - 14);
       ensure(lines.length * 14);
-      txt('•', M + 2, y, 10, font, BLUE);
+      txt('•', M + 2, y, 10, bold, ORANGE);
       lines.forEach((l, i) => txt(l, M + 14, y - i * 14, 10));
       y -= lines.length * 14 + 2;
     }
@@ -136,8 +137,8 @@ export async function renderTechPdf(o: {
     const xs: number[] = [];
     cols.reduce((x, c) => (xs.push(x), x + c.w), M);
     const head = () => {
-      page.drawRectangle({ x: M - 4, y: y - 5, width: CW + 8, height: 18, color: rgb(0.95, 0.96, 0.99) });
-      cols.forEach((c, i) => txt(c.h, c.align === 'right' ? xs[i] + c.w - 4 : xs[i], y, 8, bold, GREY, c.align || 'left'));
+      page.drawRectangle({ x: M - 4, y: y - 5, width: CW + 8, height: 18, color: DARK });
+      cols.forEach((c, i) => txt(c.h, c.align === 'right' ? xs[i] + c.w - 4 : xs[i], y, 8, bold, rgb(1, 1, 1), c.align || 'left'));
       y -= 19;
     };
     ensure(40);
@@ -149,7 +150,7 @@ export async function renderTechPdf(o: {
         newPage();
         head();
       }
-      if (opts.shade?.(ri)) page.drawRectangle({ x: M - 4, y: y - h + 9, width: CW + 8, height: h, color: rgb(0.985, 0.987, 0.995) });
+      if (opts.shade?.(ri)) page.drawRectangle({ x: M - 4, y: y - h + 9, width: CW + 8, height: h, color: SOFT });
       cells.forEach((lines, i) =>
         lines.forEach((l, li) => txt(l, cols[i].align === 'right' ? xs[i] + cols[i].w - 4 : xs[i], y - li * 11, cols[i].size ?? 8.5, cols[i].bold ? bold : font, DARK, cols[i].align || 'left')),
       );
@@ -162,8 +163,9 @@ export async function renderTechPdf(o: {
   // ---------- Titelbereich
   newPage();
   y -= 10;
-  txt(t.doc, M, y, 22, bold, DARK);
-  y -= 26;
+  txt(t.doc, M, y, 26, bold, DARK);
+  page.drawRectangle({ x: M, y: y - 10, width: 40, height: 3.5, color: ORANGE });
+  y -= 32;
   for (const l of wrap(p.title, font, 13, CW)) {
     txt(l, M, y, 13, font, GREY);
     y -= 17;

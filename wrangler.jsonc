@@ -9,7 +9,7 @@
     "directory": "./dist/client",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/auth/*", "/u/*"]
+    "run_worker_first": ["/api/*", "/auth/*", "/u/*", "/hooks/*"]
   },
   "d1_databases": [
     {
@@ -19,14 +19,19 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Dokumentenablage je Kunde/Projekt – R2 mit Jurisdiktion EU (wird beim ersten Deployment automatisch angelegt)
+  "r2_buckets": [{ "binding": "DOCS", "bucket_name": "devunox-crm-dokumente", "jurisdiction": "eu" }],
   // KI-Agent: alle 15 Minuten Antworten prüfen und fällige Mails senden
   "triggers": { "crons": ["*/15 * * * *"] },
   "observability": { "enabled": true },
+  // Eigene Adresse (Zone devunox.ai liegt im selben Cloudflare-Konto – wird beim Deploy automatisch eingerichtet)
+  "routes": [{ "pattern": "crm.devunox.ai", "custom_domain": true }],
   "vars": {
     "ALLOWED_EMAILS": "yigit@devunox-consulting.com",
     "AI_MODEL": "claude-sonnet-5-5",
-    "TIMEZONE": "Europe/Berlin"
+    "TIMEZONE": "Europe/Berlin",
+    "REVIEW_URL": "https://project.review.devunox.ai"
   }
   // Secrets (im Cloudflare-Dashboard oder per `wrangler secret put`):
-  // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ANTHROPIC_API_KEY, ENCRYPTION_KEY
+  // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ANTHROPIC_API_KEY, ENCRYPTION_KEY, REVIEW_WEBHOOK_SECRET
 }

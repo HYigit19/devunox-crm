@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api';
 import { Field, Modal, fmtDateTime, useAction, useForm, useLoad, Empty, Spinner } from '../components';
+import { NewTask } from './Tasks';
 
 const ICONS: Record<string, string> = { note: '✎', call: '☏', meeting: '◷', task: '☐', email: '✉', agent: '✦', system: '•' };
 const TYPE_LABEL: Record<string, string> = { note: 'Notiz', call: 'Anruf', meeting: 'Termin', task: 'Aufgabe', email: 'E-Mail', agent: 'KI-Agent', system: 'System' };
@@ -9,6 +10,7 @@ export function Activities({ filter, companyId, contactId, dealId }: { filter: s
   const [list, reload] = useLoad<any[]>(`/activities?${filter}`);
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [newTask, setNewTask] = useState(false);
   const { run } = useAction();
 
   const toggle = (a: any) => run('t', async () => {
@@ -20,9 +22,10 @@ export function Activities({ filter, companyId, contactId, dealId }: { filter: s
     <div className="card">
       <div className="card-head">
         <h2>Aktivitäten</h2>
-        <button className="btn sm" onClick={() => setAdding(true)}>
-          + Eintrag
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn sm" onClick={() => setNewTask(true)}>+ Aufgabe</button>
+          <button className="btn sm" onClick={() => setAdding(true)}>+ Eintrag</button>
+        </div>
       </div>
       {!list ? (
         <Spinner />
@@ -67,6 +70,7 @@ export function Activities({ filter, companyId, contactId, dealId }: { filter: s
           ))}
         </div>
       )}
+      {newTask && <NewTask companyId={companyId} contactId={contactId} onClose={() => setNewTask(false)} onSaved={() => {}} />}
       {adding && <AddActivity onClose={() => setAdding(false)} onSaved={reload} companyId={companyId} contactId={contactId} dealId={dealId} />}
     </div>
   );
@@ -75,7 +79,7 @@ export function Activities({ filter, companyId, contactId, dealId }: { filter: s
 export function AddActivity({ onClose, onSaved, companyId, contactId, dealId }: { onClose: () => void; onSaved: () => void; companyId?: string; contactId?: string; dealId?: string }) {
   const { v, set } = useForm({ type: 'note', subject: '', body: '', due_at: '', add_to_calendar: 0, invite_contact: 0, duration_min: '30' });
   const { busy, run } = useAction();
-  const withDate = v.type === 'task' || v.type === 'meeting' || v.type === 'call';
+  const withDate = v.type === 'meeting' || v.type === 'call';
   const save = () =>
     run(
       'save',
@@ -83,7 +87,7 @@ export function AddActivity({ onClose, onSaved, companyId, contactId, dealId }: 
         const r = await api.post('/activities', {
           ...v,
           due_at: v.due_at || null,
-          done: v.type === 'task' || v.type === 'meeting' ? 0 : 1,
+          done: v.type === 'meeting' ? 0 : 1,
           company_id: companyId || null,
           contact_id: contactId || null,
           deal_id: dealId || null,
@@ -111,7 +115,6 @@ export function AddActivity({ onClose, onSaved, companyId, contactId, dealId }: 
             <option value="note">Notiz</option>
             <option value="call">Anruf</option>
             <option value="meeting">Termin</option>
-            <option value="task">Aufgabe / Follow-up</option>
           </select>
         </Field>
         {withDate ? (
