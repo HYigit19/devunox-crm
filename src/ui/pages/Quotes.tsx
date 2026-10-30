@@ -169,7 +169,7 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
             </div>
           </div>
           <div className="card">
-            <div className="card-head">
+            <div className="card-head" style={{ flexWrap: 'wrap' }}>
               <h2>Positionen</h2>
               {!locked && (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -196,13 +196,13 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
                         <input value={it.name} onChange={(e) => updItem(i, 'name', e.target.value)} placeholder="Bezeichnung" disabled={locked} />
                         <textarea value={it.description} onChange={(e) => updItem(i, 'description', e.target.value)} placeholder="Beschreibung (optional)" disabled={locked} />
                       </td>
-                      <td className="w-qty"><input type="number" step="0.5" value={it.qty} onChange={(e) => updItem(i, 'qty', e.target.value)} disabled={locked} /></td>
-                      <td className="w-unit"><input value={it.unit || ''} onChange={(e) => updItem(i, 'unit', e.target.value)} disabled={locked} /></td>
-                      <td className="w-price"><input type="number" step="0.01" value={it.unit_price} onChange={(e) => updItem(i, 'unit_price', e.target.value)} disabled={locked} /></td>
-                      <td className="w-pct"><input type="number" value={it.discount_pct} onChange={(e) => updItem(i, 'discount_pct', e.target.value)} disabled={locked} /></td>
-                      {q.tax_mode === 'standard' && <td className="w-pct"><input type="number" value={it.tax_rate} onChange={(e) => updItem(i, 'tax_rate', e.target.value)} disabled={locked} /></td>}
-                      <td className="num" style={{ paddingTop: 12, whiteSpace: 'nowrap' }}>{fmtMoney2((Number(it.qty) || 0) * (Number(it.unit_price) || 0) * (1 - (Number(it.discount_pct) || 0) / 100), q.currency)}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
+                      <td className="w-qty" data-l="Menge"><input type="number" step="0.5" value={it.qty} onChange={(e) => updItem(i, 'qty', e.target.value)} disabled={locked} /></td>
+                      <td className="w-unit" data-l="Einheit"><input value={it.unit || ''} onChange={(e) => updItem(i, 'unit', e.target.value)} disabled={locked} /></td>
+                      <td className="w-price" data-l="Preis"><input type="number" step="0.01" value={it.unit_price} onChange={(e) => updItem(i, 'unit_price', e.target.value)} disabled={locked} /></td>
+                      <td className="w-pct" data-l="Rabatt %"><input type="number" value={it.discount_pct} onChange={(e) => updItem(i, 'discount_pct', e.target.value)} disabled={locked} /></td>
+                      {q.tax_mode === 'standard' && <td className="w-pct" data-l="MwSt %"><input type="number" value={it.tax_rate} onChange={(e) => updItem(i, 'tax_rate', e.target.value)} disabled={locked} /></td>}
+                      <td className="num item-sum" data-l="Summe" style={{ paddingTop: 12, whiteSpace: 'nowrap' }}>{fmtMoney2((Number(it.qty) || 0) * (Number(it.unit_price) || 0) * (1 - (Number(it.discount_pct) || 0) / 100), q.currency)}</td>
+                      <td className="item-act" style={{ whiteSpace: 'nowrap' }}>
                         {!locked && (
                           <>
                             <button className="icon-btn" title="Nach oben" onClick={() => moveItem(i, -1)}>↑</button>
