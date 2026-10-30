@@ -216,7 +216,7 @@ export async function renderTechPdf(o: {
       r.title + (r.priority ? ` (${r.priority})` : ''),
       F[r.fit] || r.fit,
       r.solution,
-      String(r.effort_days ?? ''),
+      new Intl.NumberFormat(lang === 'de' ? 'de-DE' : 'en-US').format(Number(r.effort_days) || 0),
     ]),
     { shade: (i) => i % 2 === 1 },
   );
