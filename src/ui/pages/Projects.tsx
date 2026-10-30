@@ -51,7 +51,7 @@ export function ProjectCards({ list }: { list: any[] }) {
         return (
           <div key={p.id} className="proj" onClick={() => go(`/projects/${p.id}`)}>
             <div className="proj-top">
-              <div className="proj-ico" style={{ background: p.status === 'done' ? 'var(--green)' : 'var(--ink)' }}>{p.name.slice(0, 1).toUpperCase()}</div>
+              <div className={`proj-ico ${p.status === 'done' ? 'done' : ''}`}>{p.name.slice(0, 1).toUpperCase()}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</h3>
                 <div className="muted" style={{ fontSize: 13 }}>{p.company_name || 'ohne Kunde'}</div>

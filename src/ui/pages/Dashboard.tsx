@@ -5,23 +5,28 @@ import { ICONS, Icon } from '../icons';
 import type { Me } from '../main';
 import { NewTask, TaskDrawer, TASK_STATUS } from './Tasks';
 
-const STAGE_COLORS: Record<string, string> = { lead: '#d9d9e0', qualified: '#F2C9B3', proposal: '#FF5A1F', negotiation: '#953A1B', won: '#141417', lost: '#ececf0' };
+const STAGE_COLORS: Record<string, string> = { lead: '#3d7bff', qualified: '#8b6cff', proposal: '#ff5a1f', negotiation: '#ff3d7f', won: '#2bd9a0', lost: '#5b5970' };
 
 function Donut({ parts, total, label }: { parts: { value: number; color: string }[]; total: string; label: string }) {
   const sum = parts.reduce((a, p) => a + p.value, 0) || 1;
-  const R = 62, C = 2 * Math.PI * R;
+  const R = 64, C = 2 * Math.PI * R;
   let off = 0;
   return (
-    <svg width="170" height="170" viewBox="0 0 170 170">
-      <circle cx="85" cy="85" r={R} fill="none" stroke="#f0f0f3" strokeWidth="20" />
-      {parts.filter((p) => p.value > 0).map((p, i) => {
-        const len = (p.value / sum) * C;
-        const el = <circle key={i} cx="85" cy="85" r={R} fill="none" stroke={p.color} strokeWidth="20" strokeDasharray={`${Math.max(len - 2, 0)} ${C}`} strokeDashoffset={-off} transform="rotate(-90 85 85)" strokeLinecap="butt" />;
-        off += len;
-        return el;
-      })}
-      <text x="85" y="82" textAnchor="middle" fontSize="22" fontWeight="700" fill="#141417">{total}</text>
-      <text x="85" y="102" textAnchor="middle" fontSize="11.5" fill="#7c7c88">{label}</text>
+    <svg width="180" height="180" viewBox="0 0 180 180">
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+      </defs>
+      <circle cx="90" cy="90" r={R} fill="none" stroke="var(--chip-2)" strokeWidth="16" />
+      <g filter="url(#glow)">
+        {parts.filter((p) => p.value > 0).map((p, i) => {
+          const len = (p.value / sum) * C;
+          const el = <circle key={i} cx="90" cy="90" r={R} fill="none" stroke={p.color} strokeWidth="16" strokeDasharray={`${Math.max(len - 6, 0.1)} ${C}`} strokeDashoffset={-off} transform="rotate(-90 90 90)" strokeLinecap="round" />;
+          off += len;
+          return el;
+        })}
+      </g>
+      <text x="90" y="88" textAnchor="middle" fontSize="28" fontWeight="700" fill="var(--ink)">{total}</text>
+      <text x="90" y="108" textAnchor="middle" fontSize="11.5" fill="var(--muted)">{label}</text>
     </svg>
   );
 }
@@ -94,7 +99,7 @@ export function Dashboard({ me }: { me: Me }) {
             {openTasks} {openTasks === 1 ? 'offene Aufgabe' : 'offene Aufgaben'}{feedbackOpen ? ` · ${feedbackOpen} aus Kunden-Feedback` : ''}{unread ? ` · ${unread} ${unread === 1 ? 'neue Reaktion' : 'neue Reaktionen'}` : ''} · {d.quotesOpen.n} {d.quotesOpen.n === 1 ? 'Angebot wartet' : 'Angebote warten'} auf Antwort
           </div>
         </div>
-        <div className="hero-bars"><i style={{ width: 92, background: '#FF5A1F' }} /><i style={{ width: 60, background: '#F4F4F6' }} /><i style={{ width: 74, background: '#953A1B' }} /></div>
+        <div className="hero-bars"><i style={{ width: 96, background: 'linear-gradient(90deg,#ff5a1f,#ff3d7f)', boxShadow: '0 0 18px rgba(255,90,31,.7)' }} /><i style={{ width: 62, background: '#f4f3fa' }} /><i style={{ width: 78, background: 'linear-gradient(90deg,#953a1b,#ff5a1f)' }} /></div>
       </div>
 
       <div className="quick">
@@ -105,7 +110,7 @@ export function Dashboard({ me }: { me: Me }) {
           <span className="ico tint-rust"><Icon d={ICONS.excel} /></span><div><b>Excel → Angebot</b><span>technisch + kaufmännisch</span></div>
         </button>
         <button onClick={() => setNewTask(true)}>
-          <span className="ico tint-ink"><Icon d={ICONS.tasks} /></span><div><b>Aufgabe anlegen</b><span>mit Projekt & Termin</span></div>
+          <span className="ico tint-green"><Icon d={ICONS.tasks} /></span><div><b>Aufgabe anlegen</b><span>mit Projekt & Termin</span></div>
         </button>
         <button onClick={() => go('/documents')}>
           <span className="ico tint-violet"><Icon d={ICONS.docs} /></span><div><b>Dokument ablegen</b><span>Ablage je Kunde</span></div>
@@ -113,10 +118,10 @@ export function Dashboard({ me }: { me: Me }) {
       </div>
 
       <div className="grid k4" style={{ marginBottom: 18 }}>
-        <div className="card kpi"><span className="ico tint-orange"><Icon d={ICONS.pipeline} /></span><div className="label">Pipeline gewichtet</div><div className="value">{fmtMoney(d.pipeline.weighted)}</div><div className="meta">{d.pipeline.n} Deals · {fmtMoney(d.pipeline.total)} gesamt</div></div>
-        <div className="card kpi"><span className="ico tint-rust"><Icon d={ICONS.quote} /></span><div className="label">Offene Angebote</div><div className="value">{fmtMoney(d.quotesOpen.sum)}</div><div className="meta">{d.quotesOpen.n} versendet</div></div>
+        <div className="card kpi feature"><span className="ico tint-orange"><Icon d={ICONS.pipeline} /></span><div className="label">Pipeline gewichtet</div><div className="value">{fmtMoney(d.pipeline.weighted)}</div><div className="meta">{d.pipeline.n} Deals · {fmtMoney(d.pipeline.total)} gesamt</div></div>
+        <div className="card kpi"><span className="ico tint-violet"><Icon d={ICONS.quote} /></span><div className="label">Offene Angebote</div><div className="value">{fmtMoney(d.quotesOpen.sum)}</div><div className="meta">{d.quotesOpen.n} versendet</div></div>
         <div className="card kpi"><span className="ico tint-green"><Icon d="M5 13l4 4L19 7" /></span><div className="label">Gewonnen {new Date().getFullYear()}</div><div className="value">{fmtMoney(d.quotesWon.sum)}</div><div className="meta">{d.quotesWon.n} Angebote · Quote {rate === null ? '–' : `${rate} %`}</div></div>
-        <div className="card kpi"><span className="ico tint-ink"><Icon d={ICONS.agent} /></span><div className="label">KI-Agent (7 Tage)</div><div className="value">{d.agent.week}</div><div className="meta">Mails · {d.agent.replied} Antworten · {d.agent.active} Kampagnen</div></div>
+        <div className="card kpi"><span className="ico tint-rust"><Icon d={ICONS.agent} /></span><div className="label">KI-Agent (7 Tage)</div><div className="value">{d.agent.week}</div><div className="meta">Mails · {d.agent.replied} Antworten · {d.agent.active} Kampagnen</div></div>
       </div>
 
       <div className="grid dash">
@@ -140,7 +145,7 @@ export function Dashboard({ me }: { me: Me }) {
                 const pct = p.n_tasks ? Math.round((p.n_done / p.n_tasks) * 100) : 0;
                 return (
                   <div key={p.id} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '9px 0', cursor: 'pointer' }} onClick={() => go(`/projects/${p.id}`)}>
-                    <div className="proj-ico" style={{ width: 34, height: 34, flex: '0 0 34px', fontSize: 14 }}>{p.name[0]}</div>
+                    <div className="proj-ico" style={{ width: 36, height: 36, flex: '0 0 36px', fontSize: 14 }}>{p.name[0]}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</b><span className="muted" style={{ fontSize: 12.5 }}>{p.n_done}/{p.n_tasks}</span></div>
                       <div className="bar" style={{ marginTop: 6 }}><div style={{ width: `${pct}%` }} /></div>
@@ -161,7 +166,7 @@ export function Dashboard({ me }: { me: Me }) {
                   const overdue = t.due_at && new Date(t.due_at.replace(' ', 'T')) < new Date();
                   return (
                     <div className="tl-item" key={t.id} style={{ cursor: 'pointer' }} onClick={() => setOpen(t.id)}>
-                      <div className="tl-dot" style={{ background: t.source === 'review' ? 'var(--violet-soft)' : '#f0f0f3', color: t.source === 'review' ? 'var(--violet)' : 'var(--ink-2)', cursor: 'pointer' }}
+                      <div className="tl-dot" style={{ background: t.source === 'review' ? 'var(--violet-soft)' : 'var(--chip-2)', color: t.source === 'review' ? 'var(--violet)' : 'var(--ink-2)', cursor: 'pointer' }}
                         title="Erledigt" onClick={(e) => { e.stopPropagation(); run('t', async () => { await api.put(`/tasks/${t.id}`, { status: 'done' }); reload(); }, 'Erledigt'); }}>
                         {t.source === 'review' ? '◉' : '☐'}
                       </div>
@@ -195,7 +200,7 @@ export function Dashboard({ me }: { me: Me }) {
             <div className="card-head"><h2>Termine</h2><span className="muted">Google Kalender</span></div>
             {!me.google ? <div className="muted">Google nicht verbunden.</div> : !events ? <Spinner /> : events.error ? <div className="muted">{events.error}</div> : events.length === 0 ? <div className="muted">Keine anstehenden Termine.</div> : (
               events.map((e: any) => (
-                <a key={e.id} href={e.link} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '7px 0', borderBottom: '1px solid #f0f0f3', textDecoration: 'none' }}>
+                <a key={e.id} href={e.link} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '7px 0', borderBottom: '1px solid var(--line)', textDecoration: 'none' }}>
                   <div style={{ fontWeight: 600 }}>{e.summary}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{e.start?.length > 10 ? fmtDateTime(e.start) : e.start}</div>
                 </a>

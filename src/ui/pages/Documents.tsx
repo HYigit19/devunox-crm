@@ -296,7 +296,7 @@ export function DocumentsPage() {
           <input placeholder="Kunde oder Kundennr. …" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 8 }} />
           <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {!companies ? <Spinner /> : list.length === 0 ? <div className="muted" style={{ padding: 8, fontSize: 13 }}>Keine Kunden.</div> : list.map((c) => (
-              <button key={c.id} onClick={() => setCid(c.id)} className="btn ghost" style={{ width: '100%', justifyContent: 'flex-start', background: c.id === cid ? 'var(--ink)' : undefined, color: c.id === cid ? '#fff' : undefined, marginBottom: 2 }}>
+              <button key={c.id} onClick={() => setCid(c.id)} className="btn ghost" style={{ width: '100%', justifyContent: 'flex-start', background: c.id === cid ? 'var(--grad-1)' : undefined, color: c.id === cid ? '#fff' : undefined, boxShadow: c.id === cid ? 'var(--glow-1)' : undefined, marginBottom: 3 }}>
                 <span className="ficon folder" style={{ width: 26, height: 26, flex: '0 0 26px', fontSize: 12 }}>▰</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{c.name}<span style={{ display: 'block', fontSize: 11, opacity: 0.6, fontWeight: 500 }}>{c.customer_no}</span></span>
               </button>

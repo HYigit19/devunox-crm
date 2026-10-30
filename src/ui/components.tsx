@@ -252,3 +252,31 @@ export function SelectContact({ value, onChange, companyId }: { value: string; o
     </select>
   );
 }
+
+// ---------------- Hell/Dunkel
+export function getTheme(): 'dark' | 'light' {
+  try {
+    return (localStorage.getItem('dvx_theme') as 'dark' | 'light') || 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+export function applyTheme(t: 'dark' | 'light') {
+  document.documentElement.dataset.theme = t;
+  try {
+    localStorage.setItem('dvx_theme', t);
+  } catch {
+    /* egal */
+  }
+  window.dispatchEvent(new Event('dvx-theme'));
+}
+export function useTheme(): ['dark' | 'light', () => void] {
+  const [t, setT] = useState(getTheme());
+  useEffect(() => {
+    const on = () => setT(getTheme());
+    window.addEventListener('dvx-theme', on);
+    return () => window.removeEventListener('dvx-theme', on);
+  }, []);
+  return [t, () => applyTheme(t === 'dark' ? 'light' : 'dark')];
+}
+export const logoFor = (t: 'dark' | 'light') => (t === 'dark' ? '/brand/logo-light.png' : '/brand/logo.png');

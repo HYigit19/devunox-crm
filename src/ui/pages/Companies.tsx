@@ -288,10 +288,10 @@ function CustomerFile({ id, onTab }: { id: string; onTab: (t: string) => void })
         )}
       </div>
       <div className="stack">
-        <div className="card" style={{ background: 'var(--ink)', color: '#fff' }}>
-          <div style={{ fontSize: 12, color: '#b9b9c3', letterSpacing: '.08em', textTransform: 'uppercase' }}>Kundennummer</div>
-          <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--orange)', letterSpacing: '-.02em' }}>{d.company.customer_no || '–'}</div>
-          <div style={{ fontSize: 13, color: '#b9b9c3' }}>Kunde seit {fmtDate(d.company.created_at)}</div>
+        <div className="card custno-card">
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)', letterSpacing: '.12em', textTransform: 'uppercase' }}>Kundennummer</div>
+          <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-.02em' }}>{d.company.customer_no || '–'}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.75)' }}>Kunde seit {fmtDate(d.company.created_at)}</div>
         </div>
         <div className="grid c2" style={{ gap: 12 }}>
           <div className="card kpi" style={{ padding: 16 }}><div className="label">Umsatz gewonnen</div><div className="value" style={{ fontSize: 20 }}>{fmtMoney(st.won)}</div><div className="meta">{st.quotes} Angebote · {st.open_quotes} offen</div></div>

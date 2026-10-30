@@ -6,8 +6,8 @@ import { TimeEntries } from './Time';
 export const TASK_STATUS: { id: string; label: string; color: string }[] = [
   { id: 'todo', label: 'Offen', color: '#9a9aa5' },
   { id: 'doing', label: 'In Arbeit', color: '#FF5A1F' },
-  { id: 'review', label: 'Beim Kunden', color: '#6b4de6' },
-  { id: 'done', label: 'Erledigt', color: '#12805c' },
+  { id: 'review', label: 'Beim Kunden', color: '#8b6cff' },
+  { id: 'done', label: 'Erledigt', color: '#2bd9a0' },
 ];
 export const PRIO_LABEL: Record<string, string> = { high: 'Hoch', medium: 'Mittel', low: 'Niedrig' };
 const SOURCE: Record<string, [string, string]> = { review: ['Review', 'violet'], agent: ['KI-Agent', 'orange'], system: ['Angebot', 'grey'] };
@@ -161,7 +161,7 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
         <div className="stack">
           <input style={{ fontSize: 18, fontWeight: 700, border: 0, padding: '4px 0', boxShadow: 'none' }} value={t.title} onChange={(e) => upd('title', e.target.value)} />
           <textarea rows={5} placeholder="Beschreibung" value={t.description || ''} onChange={(e) => upd('description', e.target.value)} />
-          <div className="card" style={{ background: '#fafafb', boxShadow: 'none', border: '1px solid var(--line)', padding: 14 }}>
+          <div className="card" style={{ background: 'var(--chip)', boxShadow: 'none', padding: 14 }}>
             <h4 style={{ marginBottom: 8 }}>Zeit</h4>
             <TimeEntries taskId={id} projectId={t.project_id || undefined} companyId={t.company_id || undefined} title={t.title} compact />
           </div>
