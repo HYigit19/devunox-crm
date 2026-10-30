@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devunox-crm",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "build": { "command": "npm run build:ui" },
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/auth/*", "/u/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "devunox-crm",
+      "database_id": "e21a4d40-644f-47b1-bff1-3f146c37e0f8",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // KI-Agent: alle 15 Minuten Antworten prüfen und fällige Mails senden
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true },
+  "vars": {
+    "ALLOWED_EMAILS": "yigit@devunox-consulting.com",
+    "AI_MODEL": "claude-sonnet-5-5",
+    "TIMEZONE": "Europe/Berlin"
+  }
+  // Secrets (im Cloudflare-Dashboard oder per `wrangler secret put`):
+  // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ANTHROPIC_API_KEY, ENCRYPTION_KEY
+}
