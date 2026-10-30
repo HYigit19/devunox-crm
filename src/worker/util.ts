@@ -8,6 +8,7 @@ export interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   ANTHROPIC_API_KEY: string;
+  ANTHROPIC_BASE_URL?: string; // optional, z. B. für ein AI Gateway
   ENCRYPTION_KEY: string;      // beliebiger langer Zufallsstring
   DEV_AUTH?: string;           // nur lokal: "1" erlaubt Login ohne Google
 }
@@ -126,6 +127,10 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   note_none_en: '',
   ai_company_profile: 'Devunox Solutions ist ein SAP-Beratungshaus mit Schwerpunkt SAP QM (Quality Management) und S/4HANA. Wir stellen kurzfristig erfahrene Nearshore-Consultants aus Osteuropa, begleitet von deutschen Projektmanagern – zu einem festen Pauschalpreis statt Tagessätzen.',
   ai_signature: 'Hüseyin Yigit\nCEO & Senior SAP QM Consultant\nDevunox Solutions\n+49 6142 330 60 55\nwww.devunox-consulting.com',
+  tech_profile: 'devunoxAI (Marke der Devunox Solutions) entwickelt individuelle Software: Websites, Web-Apps, Kundenportale, Dashboards und KI-Automatisierungen (z. B. KI-Assistenten, Dokumentenverarbeitung, E-Mail-Automatisierung mit Claude). Bevorzugter Stack: React/TypeScript, Cloudflare Workers, D1-Datenbank, R2-Speicher (EU), Anbindungen per REST-API (Google Workspace, Microsoft 365, SAP, CRM-/ERP-Systeme). Vorgehen agil in 1–2-wöchigen Iterationen mit Demo, Tests und Übergabe inkl. Dokumentation.',
+  day_rate: '960',
+  day_rate_currency: 'EUR',
+  pm_pct: '15',
   send_days: '1,2,3,4,5',
   send_hour_from: '8',
   send_hour_to: '17',

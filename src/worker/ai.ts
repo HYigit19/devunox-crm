@@ -1,7 +1,7 @@
 import { Env, CONSENT_COUNTRIES, getSettings, hmac, log, uid } from './util';
 import { getAccessToken, sendMail, findReply, textToHtml } from './google';
 
-const API = 'https://api.anthropic.com/v1/messages';
+
 
 type ClaudeOpts = { system: string; prompt: string; maxTokens?: number; webSearch?: number };
 
@@ -14,7 +14,7 @@ export async function askClaude(env: Env, o: ClaudeOpts): Promise<string> {
     messages: [{ role: 'user', content: o.prompt }],
   };
   if (o.webSearch) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: o.webSearch }];
-  const res = await fetch(API, {
+  const res = await fetch(`${env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com'}/v1/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify(body),

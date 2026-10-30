@@ -11,7 +11,7 @@ export function QuotesList() {
   const sum = (s: string) => (list || []).filter((q) => q.status === s).reduce((a, q) => a + q.total, 0);
   return (
     <>
-      <PageHead title="Angebote" sub={list ? `${list.length} Angebote` : ''} actions={<button className="btn primary" disabled={!!busy} onClick={create}>+ Angebot</button>} />
+      <PageHead title="Angebote" sub={list ? `${list.length} Angebote` : ''} actions={<><button className="btn ai" onClick={() => go('/import')}>✦ Aus Excel erstellen</button><button className="btn primary" disabled={!!busy} onClick={create}>+ Angebot</button></>} />
       {!status && list && list.length > 0 && (
         <div className="grid k4" style={{ marginBottom: 16 }}>
           {(['draft', 'sent', 'accepted', 'rejected'] as const).map((s) => (
@@ -231,6 +231,7 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
         </div>
 
         <div className="stack">
+          <TechCard quoteId={id} currency={q.currency} onRecalc={load} />
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>Kunde & Konditionen</h2>
             <div className="form" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -284,9 +285,10 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
 function SendQuote({ id, onClose, onSent }: { id: string; onClose: () => void; onSent: () => void }) {
   const [m, setM] = useState<any>(null);
   const [drive, setDrive] = useState(true);
+  const [tech, setTech] = useState(true);
   const { busy, run } = useAction();
   useEffect(() => { api.get(`/quotes/${id}/mail-draft`).then((d) => setM({ ...d, cc: '' })); }, [id]);
-  const send = () => run('s', async () => { await api.post(`/quotes/${id}/send`, { ...m, saveToDrive: drive }); onSent(); onClose(); }, 'Angebot per Gmail versendet');
+  const send = () => run('s', async () => { await api.post(`/quotes/${id}/send`, { ...m, saveToDrive: drive, includeTech: tech }); onSent(); onClose(); }, 'Angebot per Gmail versendet');
   return (
     <Modal
       wide
@@ -306,7 +308,139 @@ function SendQuote({ id, onClose, onSent }: { id: string; onClose: () => void; o
           <Field label="Betreff" span={2}><input value={m.subject} onChange={(e) => setM({ ...m, subject: e.target.value })} /></Field>
           <Field label="Nachricht" span={2}><textarea rows={12} value={m.body} onChange={(e) => setM({ ...m, body: e.target.value })} /></Field>
           <div className="full muted" style={{ fontSize: 13 }}>📎 Das Angebot wird als PDF angehängt.</div>
+          {m.hasTech && <label className="check full"><input type="checkbox" checked={tech} onChange={(e) => setTech(e.target.checked)} /> Technisches Angebot als zweites PDF anhängen</label>}
           <label className="check full"><input type="checkbox" checked={drive} onChange={(e) => setDrive(e.target.checked)} /> PDF zusätzlich in Google Drive ablegen (Ordner „Devunox CRM/Angebote“)</label>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ---------------- Technisches Angebot
+
+const FIT_LABEL: Record<string, string> = { standard: 'Standard', config: 'Anpassung', custom: 'Neuentwicklung' };
+
+function effort(d: any) {
+  const pk = (d.packages || []).map((p: any) => ({ ...p, days: d.requirements.filter((r: any) => r.package === p.name).reduce((a: number, r: any) => a + (Number(r.effort_days) || 0), 0) + (Number(p.extra_days) || 0) }));
+  const orphan = d.requirements.filter((r: any) => !(d.packages || []).some((p: any) => p.name === r.package)).reduce((a: number, r: any) => a + (Number(r.effort_days) || 0), 0);
+  const dev = pk.reduce((a: number, p: any) => a + p.days, 0) + orphan;
+  const pm = Math.round(dev * (Number(d.pm_pct) || 0) / 100 * 2) / 2;
+  return { pk, dev, pm, total: dev + pm };
+}
+
+function TechCard({ quoteId, currency, onRecalc }: { quoteId: string; currency: string; onRecalc: () => void }) {
+  const [tp, reload] = useLoad<any>(`/quotes/${quoteId}/tech`);
+  const [edit, setEdit] = useState(false);
+  if (!tp) return null;
+  const d = tp.data;
+  const e = effort(d);
+  const count = (f: string) => d.requirements.filter((r: any) => r.fit === f).length;
+  return (
+    <div className="card ai-box">
+      <div className="card-head"><h2>✦ Technisches Angebot</h2></div>
+      <div style={{ fontSize: 13.5 }}>
+        <b>{d.requirements.length}</b> Anforderungen · <b>{e.total}</b> PT gesamt ({e.dev} Entwicklung + {e.pm} PM)
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+          <span className="fit standard">{count('standard')} Standard</span>
+          <span className="fit config">{count('config')} Anpassung</span>
+          <span className="fit custom">{count('custom')} Neuentwicklung</span>
+        </div>
+        <div className="muted" style={{ fontSize: 12.5 }}>Tagessatz {fmtMoney2(d.day_rate, currency)} · {tp.source_file ? `aus „${tp.source_file}“` : ''}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        <a className="btn sm" href={`/api/quotes/${quoteId}/tech/pdf`} target="_blank" rel="noreferrer">PDF ansehen</a>
+        <button className="btn sm" onClick={() => setEdit(true)}>Bearbeiten</button>
+      </div>
+      {edit && <TechEditor quoteId={quoteId} tp={tp} onClose={() => setEdit(false)} onSaved={(recalc) => { reload(); if (recalc) onRecalc(); }} />}
+    </div>
+  );
+}
+
+function TechEditor({ quoteId, tp, onClose, onSaved }: { quoteId: string; tp: any; onClose: () => void; onSaved: (recalc: boolean) => void }) {
+  const [d, setD] = useState<any>(JSON.parse(JSON.stringify(tp.data)));
+  const [tab, setTab] = useState<'req' | 'text' | 'plan'>('req');
+  const { busy, run } = useAction();
+  const e = effort(d);
+  const setReq = (i: number, k: string, v: any) => setD({ ...d, requirements: d.requirements.map((r: any, j: number) => (j === i ? { ...r, [k]: v } : r)) });
+  const setList = (k: string, v: string) => setD({ ...d, [k]: v.split('\n').map((x) => x.trim()).filter(Boolean) });
+  const save = (recalc: boolean) => run('s', async () => {
+    const data = { ...d, requirements: d.requirements.map((r: any) => ({ ...r, effort_days: Number(r.effort_days) || 0 })), packages: d.packages.map((p: any) => ({ ...p, extra_days: Number(p.extra_days) || 0 })), pm_pct: Number(d.pm_pct) || 0, day_rate: Number(d.day_rate) || 0 };
+    await api.put(`/quotes/${quoteId}/tech`, { data, recalc });
+    onSaved(recalc);
+    onClose();
+  }, recalc ? 'Gespeichert – Angebotspositionen neu berechnet' : 'Technisches Angebot gespeichert');
+  return (
+    <Modal wide title="Technisches Angebot bearbeiten" onClose={onClose} footer={
+      <>
+        <span className="muted" style={{ marginRight: 'auto', fontSize: 13 }}>{e.dev} PT + {e.pm} PT PM = <b>{e.total} PT</b></span>
+        <button className="btn" onClick={onClose}>Abbrechen</button>
+        <button className="btn" disabled={!!busy} onClick={() => save(false)}>Nur speichern</button>
+        <button className="btn primary" disabled={!!busy} onClick={() => save(true)}>Speichern & Preise neu berechnen</button>
+      </>
+    }>
+      <div className="tabs">
+        <button className={tab === 'req' ? 'active' : ''} onClick={() => setTab('req')}>Anforderungen ({d.requirements.length})</button>
+        <button className={tab === 'text' ? 'active' : ''} onClick={() => setTab('text')}>Texte</button>
+        <button className={tab === 'plan' ? 'active' : ''} onClick={() => setTab('plan')}>Pakete, Plan & Annahmen</button>
+      </div>
+      {tab === 'req' && (
+        <div className="table-wrap">
+          <table className="matrix">
+            <thead><tr><th>Nr.</th><th>Anforderung</th><th>Bewertung</th><th>Lösung</th><th>PT</th><th>Paket</th></tr></thead>
+            <tbody>
+              {d.requirements.map((r: any, i: number) => (
+                <tr key={i}>
+                  <td style={{ whiteSpace: 'nowrap', fontSize: 13 }}>{r.ref}</td>
+                  <td style={{ minWidth: 160, fontSize: 13 }}><b>{r.title}</b>{r.priority && <div className="muted">{r.priority}</div>}</td>
+                  <td><select value={r.fit} onChange={(ev) => setReq(i, 'fit', ev.target.value)}>{Object.entries(FIT_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></td>
+                  <td style={{ minWidth: 240 }}><textarea value={r.solution} onChange={(ev) => setReq(i, 'solution', ev.target.value)} /></td>
+                  <td style={{ width: 70 }}><input type="number" step="0.5" value={r.effort_days} onChange={(ev) => setReq(i, 'effort_days', ev.target.value)} /></td>
+                  <td><select value={r.package} onChange={(ev) => setReq(i, 'package', ev.target.value)}>{d.packages.map((p: any) => <option key={p.name}>{p.name}</option>)}</select></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {tab === 'text' && (
+        <div className="form">
+          <Field label="Titel" span={2}><input value={d.title || ''} onChange={(ev) => setD({ ...d, title: ev.target.value })} /></Field>
+          <Field label="Ausgangslage" span={2}><textarea rows={4} value={d.summary || ''} onChange={(ev) => setD({ ...d, summary: ev.target.value })} /></Field>
+          <Field label="Ziele (eine pro Zeile)" span={2}><textarea rows={3} value={(d.objectives || []).join('\n')} onChange={(ev) => setList('objectives', ev.target.value)} /></Field>
+          <Field label="Lösungsansatz" span={2}><textarea rows={5} value={d.solution || ''} onChange={(ev) => setD({ ...d, solution: ev.target.value })} /></Field>
+          <Field label="Architektur" span={2}><textarea rows={3} value={d.architecture || ''} onChange={(ev) => setD({ ...d, architecture: ev.target.value })} /></Field>
+          <Field label="Technologie (Bereich: Technologie, eine pro Zeile)" span={2}>
+            <textarea rows={4} value={(d.tech_stack || []).map((x: any) => `${x.area}: ${x.technology}`).join('\n')} onChange={(ev) => setD({ ...d, tech_stack: ev.target.value.split('\n').filter((l) => l.trim()).map((l) => { const [a, ...rest] = l.split(':'); return { area: a.trim(), technology: rest.join(':').trim() }; }) })} />
+          </Field>
+        </div>
+      )}
+      {tab === 'plan' && (
+        <div className="stack">
+          <div className="form">
+            <Field label="Tagessatz"><input type="number" value={d.day_rate} onChange={(ev) => setD({ ...d, day_rate: ev.target.value })} /></Field>
+            <Field label="PM & QS Aufschlag %"><input type="number" value={d.pm_pct} onChange={(ev) => setD({ ...d, pm_pct: ev.target.value })} /></Field>
+          </div>
+          <table style={{ fontSize: 13 }}>
+            <thead><tr><th>Arbeitspaket</th><th>Beschreibung</th><th className="num">Zusatz-PT</th><th className="num">Summe PT</th></tr></thead>
+            <tbody>
+              {d.packages.map((p: any, i: number) => (
+                <tr key={i}>
+                  <td style={{ minWidth: 150 }}><input value={p.name} onChange={(ev) => { const old = p.name; const name = ev.target.value; setD({ ...d, packages: d.packages.map((x: any, j: number) => (j === i ? { ...x, name } : x)), requirements: d.requirements.map((r: any) => (r.package === old ? { ...r, package: name } : r)) }); }} /></td>
+                  <td><input value={p.description || ''} onChange={(ev) => setD({ ...d, packages: d.packages.map((x: any, j: number) => (j === i ? { ...x, description: ev.target.value } : x)) })} /></td>
+                  <td style={{ width: 90 }}><input type="number" step="0.5" value={p.extra_days || 0} onChange={(ev) => setD({ ...d, packages: d.packages.map((x: any, j: number) => (j === i ? { ...x, extra_days: ev.target.value } : x)) })} /></td>
+                  <td className="num">{e.pk[i]?.days}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="form">
+            <Field label="Projektphasen (Name | Wochen | Ergebnisse, eine pro Zeile)" span={2}>
+              <textarea rows={4} value={(d.phases || []).map((x: any) => `${x.name} | ${x.weeks} | ${x.deliverables || ''}`).join('\n')} onChange={(ev) => setD({ ...d, phases: ev.target.value.split('\n').filter((l) => l.trim()).map((l) => { const [name, weeks, deliverables] = l.split('|').map((x) => x.trim()); return { name, weeks: Number(weeks) || 0, deliverables }; }) })} />
+            </Field>
+            <Field label="Annahmen (eine pro Zeile)" span={2}><textarea rows={4} value={(d.assumptions || []).join('\n')} onChange={(ev) => setList('assumptions', ev.target.value)} /></Field>
+            <Field label="Nicht im Umfang (eine pro Zeile)" span={2}><textarea rows={3} value={(d.exclusions || []).join('\n')} onChange={(ev) => setList('exclusions', ev.target.value)} /></Field>
+            <Field label="Offene Fragen (eine pro Zeile)" span={2}><textarea rows={3} value={(d.open_questions || []).join('\n')} onChange={(ev) => setList('open_questions', ev.target.value)} /></Field>
+          </div>
         </div>
       )}
     </Modal>

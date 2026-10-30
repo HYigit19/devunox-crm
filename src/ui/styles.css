@@ -242,3 +242,20 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .items td.item-act { align-self: end; text-align: right; padding-bottom: 4px !important; }
   .card-head select { width: 100% !important; }
 }
+.drop { border: 2px dashed #c9d4ea; border-radius: 14px; padding: 30px 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; cursor: pointer; background: #fafcff; transition: all 0.15s; color: var(--brand); }
+.drop b { color: var(--text); }
+.drop:hover, .drop.over { border-color: var(--brand-2); background: var(--brand-soft); }
+.rfq-cust { border-top: 1px solid var(--line); }
+.rfq-cust:first-of-type { border-top: 0; }
+.rfq-head { display: flex; gap: 12px; align-items: center; padding: 12px 0; cursor: pointer; }
+.rfq-done { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--green-soft); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; font-size: 13.5px; }
+.fit { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.fit.standard { background: var(--green-soft); color: var(--green); }
+.fit.config { background: var(--amber-soft); color: var(--amber); }
+.fit.custom { background: #efeafe; color: #6d28d9; }
+.matrix td { vertical-align: top; }
+.matrix textarea { min-height: 54px; font-size: 13px; }
+.matrix input, .matrix select { font-size: 13px; padding: 5px 7px; }
+.modal:has(.matrix) { max-width: 1180px; }
+.matrix td:nth-child(5) { width: 84px !important; }
+.matrix select { min-width: 130px; }

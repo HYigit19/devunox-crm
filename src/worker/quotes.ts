@@ -3,6 +3,7 @@ import { AppEnv, Env, addDays, getSettings, insertRow, nextNumber, pick, round2,
 import { renderQuotePdf, money } from './pdf';
 import { getAccessToken, sendMail, textToHtml, uploadToDrive, driveQuotesFolder } from './google';
 import { draftQuote } from './ai';
+import { buildTechPdf, loadTech } from './rfq';
 
 export const quoteRoutes = new Hono<AppEnv>();
 
@@ -100,6 +101,15 @@ async function buildPdf(env: Env, id: string) {
   });
   const safe = (q.company_name || 'Kunde').replace(/[^\w\-äöüÄÖÜß ]+/g, '').trim().replace(/\s+/g, '_');
   return { bytes, filename: `${q.language === 'en' ? 'Proposal' : 'Angebot'}_${q.number}_${safe}.pdf`, quote: q };
+}
+
+async function uploadTechToDrive(env: Env, token: string, folder: string, quoteId: string) {
+  const tp = await loadTech(env, quoteId);
+  if (!tp) return;
+  const pdf = await buildTechPdf(env, quoteId);
+  if (!pdf) return;
+  const f = await uploadToDrive(token, folder, pdf.filename, pdf.bytes, tp.drive_file_id);
+  await env.DB.prepare('UPDATE tech_proposals SET drive_file_id = ? WHERE quote_id = ?').bind(f.id, quoteId).run();
 }
 
 // ---------------- Routen
@@ -206,6 +216,8 @@ quoteRoutes.post('/:id/duplicate', async (c) => {
   });
   await saveItems(c.env.DB, id, src.items, Number(s.default_tax_rate) || 0);
   await refreshTotals(c.env.DB, id);
+  const tp = await loadTech(c.env, src.id);
+  if (tp) await c.env.DB.prepare('INSERT INTO tech_proposals (id, quote_id, source_file, data) VALUES (?, ?, ?, ?)').bind(uid(), id, tp.source_file, JSON.stringify(tp.data)).run();
   return c.json({ id });
 });
 
@@ -241,6 +253,7 @@ quoteRoutes.post('/:id/drive', async (c) => {
   const folder = await driveQuotesFolder(c.env, token);
   const f = await uploadToDrive(token, folder, filename, bytes, quote.drive_file_id);
   await c.env.DB.prepare('UPDATE quotes SET drive_file_id = ? WHERE id = ?').bind(f.id, quote.id).run();
+  await uploadTechToDrive(c.env, token, folder, quote.id);
   return c.json({ id: f.id, link: f.webViewLink });
 });
 
@@ -259,21 +272,25 @@ quoteRoutes.get('/:id/mail-draft', async (c) => {
         : `Guten Tag ${[contact.first_name, contact.last_name].filter(Boolean).join(' ')},`
     : en ? 'Dear Sir or Madam,' : 'Sehr geehrte Damen und Herren,';
   const total = money(q.total, q.currency, en ? 'en' : 'de');
+  const hasTech = !!(await loadTech(c.env, q.id));
+  const techLine = hasTech ? (en ? ' together with the technical proposal' : ' zusammen mit dem technischen Angebot') : '';
   const body = en
-    ? `${greet}\n\nplease find attached our proposal ${q.number}${q.title ? ` – ${q.title}` : ''} (total ${total}).\n\nI would be happy to walk you through it in a short call. Just reply to this email with a convenient time.\n\n${s.ai_signature}`
-    : `${greet}\n\nanbei erhalten Sie unser Angebot ${q.number}${q.title ? ` – ${q.title}` : ''} über ${total}.\n\nGerne gehe ich es in einem kurzen Termin mit Ihnen durch – antworten Sie einfach mit einem passenden Zeitpunkt.\n\n${s.ai_signature}`;
+    ? `${greet}\n\nplease find attached our proposal ${q.number}${q.title ? ` – ${q.title}` : ''} (total ${total})${techLine}.\n\nI would be happy to walk you through it in a short call. Just reply to this email with a convenient time.\n\n${s.ai_signature}`
+    : `${greet}\n\nanbei erhalten Sie unser Angebot ${q.number}${q.title ? ` – ${q.title}` : ''} über ${total}${techLine}.\n\nGerne gehe ich es in einem kurzen Termin mit Ihnen durch – antworten Sie einfach mit einem passenden Zeitpunkt.\n\n${s.ai_signature}`;
   return c.json({
     to: contact?.email || '',
     subject: en ? `Proposal ${q.number}${q.title ? ` – ${q.title}` : ''}` : `Angebot ${q.number}${q.title ? ` – ${q.title}` : ''}`,
     body,
+    hasTech,
   });
 });
 
 quoteRoutes.post('/:id/send', async (c) => {
   const id = c.req.param('id');
-  const { to, cc, subject, body, saveToDrive } = await c.req.json<any>();
+  const { to, cc, subject, body, saveToDrive, includeTech = true } = await c.req.json<any>();
   if (!to || !subject) return c.json({ error: 'Empfänger und Betreff erforderlich' }, 400);
   const { bytes, filename, quote } = await buildPdf(c.env, id);
+  const tech = includeTech ? await buildTechPdf(c.env, id) : null;
   const user = c.get('user');
   const s = await getSettings(c.env.DB);
   const token = await getAccessToken(c.env, user.id);
@@ -285,13 +302,14 @@ quoteRoutes.post('/:id/send', async (c) => {
     subject,
     text: body,
     html: textToHtml(body),
-    attachments: [{ filename, mimeType: 'application/pdf', data: bytes }],
+    attachments: [{ filename, mimeType: 'application/pdf', data: bytes }, ...(tech ? [{ filename: tech.filename, mimeType: 'application/pdf', data: tech.bytes }] : [])],
   });
   if (saveToDrive) {
     try {
       const folder = await driveQuotesFolder(c.env, token);
       const f = await uploadToDrive(token, folder, filename, bytes, quote.drive_file_id);
       await c.env.DB.prepare('UPDATE quotes SET drive_file_id = ? WHERE id = ?').bind(f.id, id).run();
+      if (tech) await uploadTechToDrive(c.env, token, folder, id);
     } catch {
       /* Versand war erfolgreich – Drive-Fehler nicht blockierend */
     }

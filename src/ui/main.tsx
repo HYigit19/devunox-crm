@@ -11,6 +11,7 @@ import { QuotesList, QuoteEditor } from './pages/Quotes';
 import { CampaignsList, CampaignDetail } from './pages/Campaigns';
 import { Products } from './pages/Products';
 import { Settings } from './pages/Settings';
+import { ExcelImport } from './pages/ExcelImport';
 
 export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; ai: boolean; model: string; scopes: string };
 
@@ -20,6 +21,7 @@ const NAV = [
   { path: '/companies', label: 'Firmen', icon: 'M4 21V5l8-2v18M12 9l8 2v10M8 9h.01M8 13h.01M8 17h.01M16 15h.01M16 18h.01' },
   { path: '/contacts', label: 'Kontakte', icon: 'M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 12a3 3 0 100-6 3 3 0 000 6zM20 19c0-1.7-1-3-2.5-3.6M17 6.5a2.5 2.5 0 010 5' },
   { path: '/quotes', label: 'Angebote', icon: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6' },
+  { path: '/import', label: 'Excel → Angebot', icon: 'M4 4h16v16H4zM4 9h16M9 4v16M13 13l3 3m0-3l-3 3' },
   { path: '/campaigns', label: 'KI-Agent', icon: 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z' },
   { path: '/products', label: 'Leistungen', icon: 'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10' },
   { path: '/settings', label: 'Einstellungen', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-2.9 1.2V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-2.9-1.2l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00-1.2-2.9H3a2 2 0 110-4h.1a1.7 1.7 0 001.2-2.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 002.9-1.2V3a2 2 0 114 0v.1a1.7 1.7 0 002.9 1.2l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 001.2 2.9H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z' },
@@ -97,6 +99,9 @@ function App() {
       break;
     case 'campaigns':
       page = seg[1] ? <CampaignDetail id={seg[1]} me={me} /> : <CampaignsList me={me} />;
+      break;
+    case 'import':
+      page = <ExcelImport me={me} />;
       break;
     case 'products':
       page = <Products />;

@@ -45,7 +45,7 @@ const MAP: Record<string, string> = {
   '‑': '-', '‒': '-', '―': '-', '−': '-', ' ': ' ', ' ': ' ', ' ': ' ', '→': '->', '✓': 'x',
 };
 const WIN_ANSI_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
-function clean(s: string | null | undefined): string {
+export function clean(s: string | null | undefined): string {
   if (!s) return '';
   let out = '';
   for (const ch of s.replace(/\r/g, '')) {
@@ -65,13 +65,13 @@ export function money(n: number, currency: string, lang: 'de' | 'en') {
 function num(n: number, lang: 'de' | 'en') {
   return new Intl.NumberFormat(lang === 'de' ? 'de-DE' : 'en-US', { maximumFractionDigits: 2 }).format(n);
 }
-function fmtDate(iso: string | null | undefined, lang: 'de' | 'en') {
+export function fmtDate(iso: string | null | undefined, lang: 'de' | 'en') {
   if (!iso) return '';
   const [y, m, d] = iso.slice(0, 10).split('-');
   return lang === 'de' ? `${d}.${m}.${y}` : `${y}-${m}-${d}`;
 }
 
-function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
   const lines: string[] = [];
   for (const para of clean(text).split('\n')) {
     if (!para.trim()) {
@@ -100,10 +100,10 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return lines;
 }
 
-const BLUE = rgb(0.11, 0.3, 0.85);
-const DARK = rgb(0.12, 0.14, 0.2);
-const GREY = rgb(0.42, 0.45, 0.52);
-const LINE = rgb(0.86, 0.88, 0.92);
+export const BLUE = rgb(0.11, 0.3, 0.85);
+export const DARK = rgb(0.12, 0.14, 0.2);
+export const GREY = rgb(0.42, 0.45, 0.52);
+export const LINE = rgb(0.86, 0.88, 0.92);
 
 export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
   const t = L[d.language] || L.de;

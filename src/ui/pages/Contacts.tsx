@@ -85,7 +85,7 @@ const COUNTRY_NAMES: Record<string, string> = {
   usa: 'US', 'united kingdom': 'GB', netherlands: 'NL', france: 'FR', italy: 'IT', spain: 'ES', belgium: 'BE', 'czech republic': 'CZ', czechia: 'CZ', canada: 'CA',
 };
 
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const first = text.split('\n')[0];
   const delim = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : first.includes('\t') ? '\t' : ',';
   const rows: string[][] = [];

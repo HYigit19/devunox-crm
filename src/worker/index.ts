@@ -4,6 +4,7 @@ import { authRoutes, requireAuth } from './auth';
 import { crmRoutes } from './crm';
 import { quoteRoutes } from './quotes';
 import { campaignRoutes } from './campaigns';
+import { rfqRoutes, techRoutes } from './rfq';
 import { runAgent } from './ai';
 import { getAccessToken, upcomingEvents, GoogleError } from './google';
 
@@ -127,7 +128,9 @@ api.get('/tags', async (c) => {
 });
 
 api.route('/', crmRoutes);
+api.route('/quotes', techRoutes);
 api.route('/quotes', quoteRoutes);
+api.route('/rfq', rfqRoutes);
 api.route('/campaigns', campaignRoutes);
 
 app.route('/api', api);

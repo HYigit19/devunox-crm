@@ -10,6 +10,13 @@ Angebote, CRM und KI-Vertriebsagent für Devunox. Läuft auf Cloudflare (Worker 
   - Steuer-Varianten: Inland, Reverse Charge, Nicht-EU, ohne MwSt.
   - PDF-Erzeugung mit fortlaufender Nummer (AN-2026-0001)
   - Erstentwurf per KI
+- **Excel → Angebot (KI):** Excel-Datei hochladen (eine Anforderungsliste eines Kunden oder eine Liste mehrerer Kunden).
+  - Die KI erkennt Kunden, Kontakte und Anforderungen und erstellt je Kunde zwei Dokumente:
+    - ein **technisches Angebot** (PDF): Ausgangslage, Lösungsansatz, Technologie, Fit/Gap-Bewertung und Aufwand in Personentagen je Anforderung, Arbeitspakete, Projektplan, Annahmen, Abgrenzungen, offene Fragen
+    - ein **einfaches Angebot**: Arbeitspakete × Tagessatz plus Aufschlag für Projektmanagement und Qualitätssicherung
+  - Firma, Kontakt und Deal werden automatisch angelegt.
+  - Die Bewertungen sind editierbar. Mit „Preise neu berechnen“ übernimmt das Angebot die geänderten Aufwände.
+  - Beim Gmail-Versand gehen beide PDFs mit.
 - **Gmail:** Angebote mit PDF-Anhang senden, E-Mails an Kontakte schreiben (auf Wunsch mit KI-Entwurf), Gmail-Verlauf pro Kontakt
 - **Google Kalender:** Termine und Follow-ups eintragen, Kontakt einladen, nächste Termine auf der Übersicht
 - **Google Drive:** Angebots-PDFs im Ordner „Devunox CRM/Angebote“ ablegen
@@ -25,7 +32,7 @@ Angebote, CRM und KI-Vertriebsagent für Devunox. Läuft auf Cloudflare (Worker 
 
 ### 1. Cloudflare-Datenbank – bereits erledigt
 
-Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt und hat das vollständige Schema. Ihre ID steht schon in `wrangler.jsonc`.
+Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt. Beide Migrationen (0001, 0002) sind eingespielt. Ihre ID steht schon in `wrangler.jsonc`.
 
 ### 2. Code auf GitHub und mit Cloudflare verbinden
 
@@ -68,9 +75,10 @@ Optional sind `AI_MODEL` (Standard `claude-sonnet-5-5`), `TIMEZONE` (Standard `E
 
 1. Öffne die App-Adresse und klicke auf **Mit Google Workspace anmelden**. Alle Berechtigungen bestätigen.
 2. **Einstellungen:** Firmendaten (rechtlicher Name, Adresse, NIP/USt-IdNr., KRS, Bank), Standard-MwSt., Texte, KI-Firmenprofil und Signatur eintragen.
-3. **Leistungen:** Den Beispielkatalog anlegen und die Preise anpassen.
-4. **Kontakte:** Eine CSV aus Sales Navigator oder Apollo importieren.
-5. **KI-Agent:** Eine Kampagne anlegen und Kontakte hinzufügen.
+3. **Einstellungen → Technische Angebote:** Tagessatz, PM-Aufschlag und das Leistungs- und Technologieprofil prüfen. Danach richtet die KI Lösungen und Aufwände aus.
+4. **Leistungen:** Den Beispielkatalog anlegen und die Preise anpassen.
+5. **Kontakte:** Eine CSV aus Sales Navigator oder Apollo importieren.
+6. **KI-Agent:** Eine Kampagne anlegen und Kontakte hinzufügen.
    - Über **Vorschau** prüfen, wie die Mails klingen.
    - Für einen Test **Jetzt senden** an dich selbst schicken (dafür einen Kontakt mit deiner eigenen Adresse anlegen).
    - Danach **Starten**.

@@ -62,6 +62,15 @@ export function Settings({ me }: { me: Me }) {
             </div>
           </div>
           <div className="card">
+            <h2 style={{ marginBottom: 14 }}>Technische Angebote (Excel → Angebot)</h2>
+            <div className="form c3">
+              {f('day_rate', 'Tagessatz', { hint: 'Standard für neue Angebote' })}
+              {f('day_rate_currency', 'Währung')}
+              {f('pm_pct', 'PM & QS Aufschlag %')}
+              {f('tech_profile', 'Leistungs- und Technologieprofil für die KI', { area: true, span: 3, hint: 'Was wir entwickeln und womit. Die KI richtet Lösungen und Aufwände danach aus.' })}
+            </div>
+          </div>
+          <div className="card">
             <h2 style={{ marginBottom: 14 }}>KI-Agent</h2>
             <div className="form">
               {f('ai_company_profile', 'Firmenprofil für die KI', { area: true, span: 2, hint: 'Wer wir sind, was wir anbieten, Alleinstellungsmerkmale. Der Agent erfindet nichts darüber hinaus.' })}
