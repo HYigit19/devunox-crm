@@ -119,6 +119,12 @@ Im Worker unter **Settings → Variables and Secrets** diese Werte anlegen:
 
 Optional sind `AI_MODEL` (Standard `claude-sonnet-5-5`), `TIMEZONE` (Standard `Europe/Berlin`) und `APP_URL` (wird sonst automatisch erkannt).
 
+### Anmeldung mit E-Mail und Passwort
+
+Neben Google gibt es einen Login mit E-Mail und Passwort. Nutzer dafür werden direkt in der D1-Datenbank angelegt, mit einem **Einmal-Passwort** (`password_temp = 1`, Ablauf in `password_expires_at`). Beim ersten Login muss ein eigenes Passwort (mind. 12 Zeichen) gesetzt werden; vorher sperrt die API alles außer `/api/me`. Nach 8 Fehlversuchen ist das Konto 15 Minuten gesperrt.
+
+Das Gmail-Konto für Kundenmails, Kalender und Drive verbindest du danach unter **Einstellungen → Google / Gmail → Gmail-Konto verbinden**. Es darf ein anderes Konto als der Login sein; Mails gehen dann mit diesem Konto als Absender raus. Für ein privates Gmail-Konto muss der OAuth-Zustimmungsbildschirm auf **Extern** stehen und das Konto als Testnutzer eingetragen sein.
+
 ### 6. Loslegen
 
 1. Öffne die App-Adresse und klicke auf **Mit Google Workspace anmelden**. Alle Berechtigungen bestätigen.

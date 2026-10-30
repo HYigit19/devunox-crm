@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { AppEnv, Env, addDays, getSettings, insertRow, nextNumber, pick, round2, suggestTaxMode, todayIso, uid, updateRow } from './util';
 import { renderQuotePdf, money } from './pdf';
-import { getAccessToken, sendMail, textToHtml, uploadToDrive, driveQuotesFolder } from './google';
+import { getAccessToken, sendMail, senderEmail, textToHtml, uploadToDrive, driveQuotesFolder } from './google';
 import { draftQuote } from './ai';
 import { buildTechPdf, loadTech } from './rfq';
 import { storeDocument } from './work';
@@ -304,7 +304,7 @@ quoteRoutes.post('/:id/send', async (c) => {
   const s = await getSettings(c.env.DB);
   const token = await getAccessToken(c.env, user.id);
   const sent = await sendMail(token, {
-    from: user.email,
+    from: await senderEmail(c.env, user.id),
     fromName: user.name || s.company_name,
     to,
     cc,

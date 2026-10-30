@@ -59,8 +59,8 @@ const api = new Hono<AppEnv>();
 api.use('*', requireAuth);
 
 api.get('/me', async (c) => {
-  const u = await c.env.DB.prepare('SELECT scopes, refresh_token_enc IS NOT NULL AS google FROM users WHERE id = ?').bind(c.get('user').id).first<any>();
-  return c.json({ ...c.get('user'), google: !!u?.google, scopes: u?.scopes || '', ai: !!c.env.ANTHROPIC_API_KEY, review: !!(c.env.REVIEW_URL && c.env.REVIEW_WEBHOOK_SECRET), review_url: c.env.REVIEW_URL || '', model: c.env.AI_MODEL || 'claude-sonnet-5-5' });
+  const u = await c.env.DB.prepare('SELECT scopes, refresh_token_enc IS NOT NULL AS google, google_email, password_hash IS NOT NULL AS has_password, password_temp FROM users WHERE id = ?').bind(c.get('user').id).first<any>();
+  return c.json({ ...c.get('user'), google: !!u?.google, google_email: u?.google_email || '', has_password: !!u?.has_password, must_change_password: !!u?.password_temp, scopes: u?.scopes || '', ai: !!c.env.ANTHROPIC_API_KEY, review: !!(c.env.REVIEW_URL && c.env.REVIEW_WEBHOOK_SECRET), review_url: c.env.REVIEW_URL || '', model: c.env.AI_MODEL || 'claude-sonnet-5-5' });
 });
 
 api.get('/settings', async (c) => c.json(await getSettings(c.env.DB)));

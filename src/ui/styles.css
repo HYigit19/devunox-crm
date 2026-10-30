@@ -417,6 +417,10 @@ tr:hover .row-actions { opacity: 1; }
 .login-card { max-width: 380px; width: 100%; display: flex; flex-direction: column; gap: 18px; }
 .login-card img { width: 220px; }
 .login-card p { color: var(--muted); margin: 0; }
+.login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-err { color: var(--red); font-size: 13px; }
+.login-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
 
 /* Kundennummer, Suche, Timer */
 .cno { display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; background: var(--chip-2); color: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; padding: 2px 8px; vertical-align: middle; }

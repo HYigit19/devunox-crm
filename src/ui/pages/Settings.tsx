@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Field, PageHead, Spinner, useAction, useLoad } from '../components';
-import type { Me } from '../main';
+import { PasswordForm, type Me } from '../main';
 
 const DAYS = [['1', 'Mo'], ['2', 'Di'], ['3', 'Mi'], ['4', 'Do'], ['5', 'Fr'], ['6', 'Sa'], ['7', 'So']];
 
@@ -91,16 +91,24 @@ export function Settings({ me }: { me: Me }) {
         </div>
         <div className="stack">
           <div className="card">
-            <h2 style={{ marginBottom: 12 }}>Google Workspace</h2>
+            <h2 style={{ marginBottom: 12 }}>Google / Gmail</h2>
             <dl className="dl">
-              <dt>Konto</dt><dd>{me.email}</dd>
+              <dt>Login</dt><dd>{me.email}</dd>
+              <dt>Gmail-Konto</dt><dd>{me.google_email ? <b>{me.google_email}</b> : 'nicht verbunden'}</dd>
               <dt>Gmail senden</dt><dd>{has('gmail.send') ? '✓' : '–'}</dd>
               <dt>Gmail lesen</dt><dd>{has('gmail.readonly') ? '✓' : '–'}</dd>
               <dt>Kalender</dt><dd>{has('calendar.events') ? '✓' : '–'}</dd>
               <dt>Drive</dt><dd>{has('drive.file') ? '✓' : '–'}{v.drive_folder_id && <> · <a href={`https://drive.google.com/drive/folders/${v.drive_folder_id}`} target="_blank" rel="noreferrer">Ordner</a></>}</dd>
             </dl>
-            <a className="btn sm" style={{ marginTop: 12 }} href="/auth/login">Google neu verbinden</a>
+            <p className="muted" style={{ fontSize: 12.5, margin: '10px 0 0' }}>Mails an Kunden, Kalender und Drive laufen über dieses Gmail-Konto. Es kann ein anderes Konto als dein Login sein.</p>
+            <a className="btn sm" style={{ marginTop: 12 }} href="/auth/login?connect=1">{me.google ? 'Anderes Gmail-Konto verbinden' : 'Gmail-Konto verbinden'}</a>
           </div>
+          {me.has_password && (
+            <div className="card">
+              <h2 style={{ marginBottom: 12 }}>Passwort ändern</h2>
+              <PasswordForm needCurrent onDone={() => alert('Passwort geändert. Andere Sitzungen wurden abgemeldet.')} />
+            </div>
+          )}
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>devunox Review</h2>
             <dl className="dl">

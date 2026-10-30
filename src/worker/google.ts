@@ -45,6 +45,13 @@ export async function getAccessToken(env: Env, userId: string): Promise<string> 
   return data.access_token;
 }
 
+/** Absenderadresse = verbundenes Gmail-Konto (falls abweichend vom Login), sonst Login-E-Mail. */
+export async function senderEmail(env: Env, userId: string): Promise<string> {
+  const u = await env.DB.prepare('SELECT COALESCE(google_email, email) AS e FROM users WHERE id = ?').bind(userId).first<{ e: string }>();
+  if (!u) throw new GoogleError('Benutzer nicht gefunden', 401);
+  return u.e;
+}
+
 async function gfetch<T = any>(token: string, url: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(url, { ...init, headers: { authorization: `Bearer ${token}`, ...(init.headers || {}) } });
   if (!res.ok) {

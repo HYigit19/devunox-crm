@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { AppEnv, insertRow, pick, uid, updateRow, getSettings } from './util';
-import { getAccessToken, listMailsWith, sendMail, textToHtml, createEvent } from './google';
+import { getAccessToken, listMailsWith, sendMail, senderEmail, textToHtml, createEvent } from './google';
 import { researchCompany, draftEmail } from './ai';
 import { createCompany } from './work';
 
@@ -200,7 +200,7 @@ crmRoutes.post('/contacts/:id/send-email', async (c) => {
   if (ct.consent === 'opt_out') return c.json({ error: 'Kontakt hat sich abgemeldet – kein Versand.' }, 400);
   const user = c.get('user');
   const token = await getAccessToken(c.env, user.id);
-  const sent = await sendMail(token, { from: user.email, fromName: user.name || undefined, to: ct.email, cc, subject, text: body, html: textToHtml(body) });
+  const sent = await sendMail(token, { from: await senderEmail(c.env, user.id), fromName: user.name || undefined, to: ct.email, cc, subject, text: body, html: textToHtml(body) });
   await c.env.DB.prepare(
     `INSERT INTO activities (id, type, subject, body, contact_id, company_id, done, gmail_thread_id, created_by) VALUES (?, 'email', ?, ?, ?, ?, 1, ?, ?)`,
   )

@@ -101,6 +101,31 @@ export async function hmac(secret: string, msg: string): Promise<string> {
   return toBase64Url(new Uint8Array(sig)).slice(0, 32);
 }
 
+// ---------- Passwörter (PBKDF2-SHA256; Workers erlauben max. 100 000 Iterationen) ----------
+const PBKDF2_ITER = 100_000;
+
+async function pbkdf2(password: string, salt: Uint8Array<ArrayBuffer>, iter: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, key, 256));
+}
+
+/** Format: pbkdf2$<iterationen>$<salt base64>$<hash base64> */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return `pbkdf2$${PBKDF2_ITER}$${b64(salt)}$${b64(await pbkdf2(password, salt, PBKDF2_ITER))}`;
+}
+
+export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+  const [algo, iter, salt, hash] = (stored || '').split('$');
+  if (algo !== 'pbkdf2' || !iter || !salt || !hash) return false;
+  const got = await pbkdf2(password, unb64(salt), Number(iter));
+  const want = unb64(hash);
+  if (got.length !== want.length) return false;
+  let diff = 0;
+  for (let i = 0; i < got.length; i++) diff |= got[i] ^ want[i];
+  return diff === 0;
+}
+
 // ---------- Einstellungen ----------
 export const DEFAULT_SETTINGS: Record<string, string> = {
   company_name: 'devunox AI',

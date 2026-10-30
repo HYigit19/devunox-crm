@@ -18,7 +18,7 @@ import { ProjectsList, ProjectDetail } from './pages/Projects';
 import { DocumentsPage } from './pages/Documents';
 import { TimePage, TimerBadge } from './pages/Time';
 
-export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; ai: boolean; review: boolean; review_url: string; model: string; scopes: string };
+export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; google_email: string; has_password: boolean; must_change_password: boolean; ai: boolean; review: boolean; review_url: string; model: string; scopes: string };
 
 const NAV: { group: string; items: { path: string; label: string; icon: string; badge?: 'tasks' }[] }[] = [
   { group: '', items: [{ path: '/', label: 'Übersicht', icon: I.home }] },
@@ -51,7 +51,14 @@ const NAV: { group: string; items: { path: string; label: string; icon: string; 
   },
 ];
 
-function Login() {
+async function authPost(url: string, body: unknown) {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), credentials: 'same-origin' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any).error || `Fehler ${res.status}`);
+  return data as any;
+}
+
+function LoginShell({ children }: { children: React.ReactNode }) {
   const [theme] = useTheme();
   return (
     <div className="login">
@@ -67,23 +74,99 @@ function Login() {
       <div className="login-side">
         <div className="login-card">
           <img src={logoFor(theme)} alt="devunox AI" />
-          <div>
-            <h1 style={{ fontSize: 26 }}>Willkommen zurück</h1>
-            <p style={{ marginTop: 6 }}>Melde dich mit deinem Google-Workspace-Konto an.</p>
-          </div>
-          <a className="btn primary lg" href="/auth/login">
-            <span className="g-ico"><svg width="15" height="15" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
-            </svg></span>
-            Mit Google anmelden
-          </a>
-          <small>Zugriff nur für freigeschaltete devunox-Konten.</small>
+          {children}
         </div>
       </div>
     </div>
+  );
+}
+
+function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    setBusy(true);
+    try {
+      await authPost('/auth/password-login', { email, password });
+      window.location.reload();
+    } catch (x: any) {
+      setErr(x.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <LoginShell>
+      <div>
+        <h1 style={{ fontSize: 26 }}>Willkommen zurück</h1>
+        <p style={{ marginTop: 6 }}>Melde dich mit E-Mail und Passwort an.</p>
+      </div>
+      <form className="login-form" onSubmit={submit}>
+        <input type="email" autoComplete="username" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="password" autoComplete="current-password" placeholder="Passwort" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        {err && <div className="login-err">{err}</div>}
+        <button className="btn primary lg" type="submit" disabled={busy}>{busy ? 'Anmelden…' : 'Anmelden'}</button>
+      </form>
+      <div className="login-or"><span>oder</span></div>
+      <a className="btn lg" href="/auth/login">
+        <span className="g-ico"><svg width="15" height="15" viewBox="0 0 48 48">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+        </svg></span>
+        Mit Google anmelden
+      </a>
+      <small>Zugriff nur für freigeschaltete devunox-Konten.</small>
+    </LoginShell>
+  );
+}
+
+export function PasswordForm({ needCurrent, currentLabel = 'Aktuelles Passwort', onDone }: { needCurrent: boolean; currentLabel?: string; onDone: () => void }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    if (next !== repeat) return setErr('Die beiden neuen Passwörter stimmen nicht überein.');
+    if (next.length < 12) return setErr('Das neue Passwort braucht mindestens 12 Zeichen.');
+    setBusy(true);
+    try {
+      await authPost('/auth/password-change', { current, next });
+      onDone();
+    } catch (x: any) {
+      setErr(x.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="login-form" onSubmit={submit}>
+      {needCurrent && <input type="password" autoComplete="current-password" placeholder={currentLabel} value={current} onChange={(e) => setCurrent(e.target.value)} required />}
+      <input type="password" autoComplete="new-password" placeholder="Neues Passwort (mind. 12 Zeichen)" value={next} onChange={(e) => setNext(e.target.value)} required />
+      <input type="password" autoComplete="new-password" placeholder="Neues Passwort wiederholen" value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
+      {err && <div className="login-err">{err}</div>}
+      <button className="btn primary" type="submit" disabled={busy}>{busy ? 'Speichern…' : 'Passwort speichern'}</button>
+    </form>
+  );
+}
+
+function ChangeTempPassword({ me }: { me: Me }) {
+  return (
+    <LoginShell>
+      <div>
+        <h1 style={{ fontSize: 26 }}>Eigenes Passwort festlegen</h1>
+        <p style={{ marginTop: 6 }}>Du bist als {me.email} mit einem Einmal-Passwort angemeldet. Lege jetzt dein eigenes Passwort fest.</p>
+      </div>
+      <PasswordForm needCurrent currentLabel="Einmal-Passwort" onDone={() => window.location.reload()} />
+      <a className="muted" style={{ fontSize: 13 }} href="/auth/logout">Abmelden</a>
+    </LoginShell>
   );
 }
 
@@ -171,6 +254,7 @@ function App() {
       </div>
     );
   if (me === null) return <Login />;
+  if (me.must_change_password) return <ChangeTempPassword me={me} />;
 
   const seg = route.split('?')[0].split('/').filter(Boolean);
   let page: React.ReactNode;

@@ -285,7 +285,7 @@ export async function sendEnrollmentStep(env: Env, enrollmentId: string, opts: {
   const body = mail.body.trim() + footer(mail.language, s.ai_signature, unsub);
   const subject = e.step > 0 && e.first_subject ? (/^re:/i.test(e.first_subject) ? e.first_subject : `Re: ${e.first_subject}`) : mail.subject;
 
-  const owner = await env.DB.prepare('SELECT email, name FROM users WHERE id = ?').bind(campaign.owner_id).first<any>();
+  const owner = await env.DB.prepare('SELECT COALESCE(google_email, email) AS email, name FROM users WHERE id = ?').bind(campaign.owner_id).first<any>();
   const token = await getAccessToken(env, campaign.owner_id);
   const sent = await sendMail(token, {
     from: owner.email,
