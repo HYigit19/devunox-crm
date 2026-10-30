@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { api } from '../api';
-import { Empty, Field, Modal, PageHead, SelectCompany, SelectContact, Spinner, confirmDel, fmtDate, fmtMoney, go, useAction, useLoad } from '../components';
+import { Empty, Field, Modal, PageHead, SelectCompany, SelectContact, Spinner, confirmDel, fmtDate, fmtMoney, go, useAction, useLoad, useToast } from '../components';
 import { TaskBoard } from './Tasks';
 import { DocBrowser } from './Documents';
+import { TimeEntries } from './Time';
 import type { Me } from '../main';
 
 export const PROJECT_STATUS: Record<string, [string, string]> = {
@@ -102,8 +103,10 @@ export function ProjectsList() {
 
 export function ProjectDetail({ id, me }: { id: string; me: Me }) {
   const [p, reload] = useLoad<any>(`/projects/${id}`);
-  const [tab, setTab] = useState<'tasks' | 'docs' | 'info'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'docs' | 'time' | 'info'>('tasks');
   const [edit, setEdit] = useState(false);
+  const [connect, setConnect] = useState(false);
+  const [report, setReport] = useState(false);
   const { run } = useAction();
   void me;
   if (!p) return <Spinner />;
@@ -112,9 +115,10 @@ export function ProjectDetail({ id, me }: { id: string; me: Me }) {
       <PageHead
         back="#/projects"
         title={<span style={{ display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>{p.name} <span className={`badge ${PROJECT_STATUS[p.status]?.[1]}`}>{PROJECT_STATUS[p.status]?.[0]}</span></span>}
-        sub={<>{p.company_name ? <a href={`#/companies/${p.company_id}`}>{p.company_name}</a> : 'ohne Kunde'}{p.quote_number && <> · Angebot <a href={`#/quotes/${p.quote_id}`}>{p.quote_number}</a></>}</>}
+        sub={<>{p.customer_no && <span className="cno" style={{ marginRight: 8 }}>{p.customer_no}</span>}{p.company_name ? <a href={`#/companies/${p.company_id}`}>{p.company_name}</a> : 'ohne Kunde'}{p.quote_number && <> · Angebot <a href={`#/quotes/${p.quote_id}`}>{p.quote_number}</a></>}</>}
         actions={<>
-          {p.review_url && <a className="btn" href={p.review_url} target="_blank" rel="noreferrer">devunox Review ↗</a>}
+          {p.review_url ? <a className="btn" href={p.review_url} target="_blank" rel="noreferrer">devunox Review ↗</a> : <button className="btn accent" onClick={() => setConnect(true)}>In devunox Review anlegen</button>}
+          <button className="btn" onClick={() => setReport(true)}>Statusbericht</button>
           {p.app_url && <a className="btn" href={p.app_url} target="_blank" rel="noreferrer">App öffnen ↗</a>}
           <button className="btn" onClick={() => setEdit(true)}>Bearbeiten</button>
         </>}
@@ -122,11 +126,13 @@ export function ProjectDetail({ id, me }: { id: string; me: Me }) {
       <div className="tabs">
         <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Aufgaben</button>
         <button className={tab === 'docs' ? 'active' : ''} onClick={() => setTab('docs')}>Dokumente</button>
+        <button className={tab === 'time' ? 'active' : ''} onClick={() => setTab('time')}>Zeiten</button>
         <button className={tab === 'info' ? 'active' : ''} onClick={() => setTab('info')}>Details</button>
       </div>
+      {tab === 'time' && <div className="card"><TimeEntries projectId={id} companyId={p.company_id || undefined} title={p.name} /></div>}
       {tab === 'tasks' && (
         <>
-          {!p.review_slug && <div className="legal" style={{ marginBottom: 14, background: 'var(--violet-soft)', color: 'var(--violet)' }}>Tipp: Unter „Bearbeiten“ das Projekt-Kürzel aus devunox Review eintragen – dann landet Kunden-Feedback automatisch hier.</div>}
+          {!p.review_slug && <div className="legal" style={{ marginBottom: 14, background: 'var(--violet-soft)', color: 'var(--violet)' }}>Tipp: Mit „In devunox Review anlegen“ bekommt der Kunde einen Feedback-Zugang – sein Feedback landet dann automatisch hier als Aufgabe.</div>}
           <TaskBoard filter={`project_id=${id}`} projectId={id} companyId={p.company_id} showProject={false} />
         </>
       )}
@@ -155,6 +161,70 @@ export function ProjectDetail({ id, me }: { id: string; me: Me }) {
         </div>
       )}
       {edit && <ProjectForm initial={p} onClose={() => setEdit(false)} onSaved={reload} />}
+      {connect && <ReviewConnect project={p} onClose={() => setConnect(false)} onDone={reload} />}
+      {report && <ReportDialog project={p} onClose={() => setReport(false)} />}
     </>
+  );
+}
+
+function ReportDialog({ project, onClose }: { project: any; onClose: () => void }) {
+  const [lang, setLang] = useState('de');
+  const [days, setDays] = useState('30');
+  const [archive, setArchive] = useState(true);
+  const url = `/api/projects/${project.id}/report?lang=${lang}&days=${days}${archive ? '&archive=1' : ''}`;
+  return (
+    <Modal title="Projektstatusbericht (PDF)" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Schließen</button><a className="btn primary" href={url} target="_blank" rel="noreferrer" onClick={() => setTimeout(onClose, 300)}>PDF erstellen</a></>}>
+      <div className="form">
+        <Field label="Sprache"><select value={lang} onChange={(e) => setLang(e.target.value)}><option value="de">Deutsch</option><option value="en">Englisch</option></select></Field>
+        <Field label="Zeitraum"><select value={days} onChange={(e) => setDays(e.target.value)}><option value="7">letzte 7 Tage</option><option value="14">letzte 14 Tage</option><option value="30">letzte 30 Tage</option><option value="90">letzte 90 Tage</option></select></Field>
+        <label className="check full"><input type="checkbox" checked={archive} onChange={(e) => setArchive(e.target.checked)} /> In der Kundenakte unter „Berichte“ ablegen</label>
+        <p className="muted full" style={{ fontSize: 13, margin: 0 }}>Enthält Fortschritt, erledigte und offene Aufgaben, Kunden-Feedback und erfasste Zeiten – zum Weiterleiten an den Kunden.</p>
+      </div>
+    </Modal>
+  );
+}
+
+function ReviewConnect({ project, onClose, onDone }: { project: any; onClose: () => void; onDone: () => void }) {
+  const [v, setV] = useState<any>({ contact_id: project.contact_id || '', app_url: project.app_url || '', repo_url: '' });
+  const [result, setResult] = useState<any>(null);
+  const { busy, run } = useAction();
+  const toast = useToast();
+  const go2 = () => run('c', async () => { const r = await api.post(`/projects/${project.id}/review-connect`, v); setResult(r); onDone(); }, 'Projekt in devunox Review angelegt');
+  const inviteText = (r: any) => {
+    const en = r.contact?.language === 'en';
+    return en
+      ? `Hello ${r.contact?.name || ''},\n\nyou can now give feedback on "${project.name}" directly in the app – just set a pin where something should change.\n\nPlease set your password here (link valid for 14 days):\n${r.invite_url}\n\nAfterwards you will find the project at:\n${r.hub_url}\n\nBest regards`
+      : `Guten Tag ${r.contact?.name || ''},\n\nab sofort können Sie uns zu „${project.name}“ direkt in der App Feedback geben – einfach an der passenden Stelle einen Pin setzen.\n\nBitte legen Sie hier Ihr Passwort fest (Link 14 Tage gültig):\n${r.invite_url}\n\nDanach finden Sie das Projekt unter:\n${r.hub_url}\n\nViele Grüße`;
+  };
+  const sendInvite = () => run('m', async () => {
+    const en = result.contact?.language === 'en';
+    await api.post(`/contacts/${result.contact.id}/send-email`, { subject: en ? `Feedback access: ${project.name}` : `Ihr Feedback-Zugang: ${project.name}`, body: inviteText(result) });
+  }, 'Einladung per Gmail gesendet');
+  return (
+    <Modal title="In devunox Review anlegen" onClose={onClose} footer={result ? <button className="btn primary" onClick={onClose}>Fertig</button> : <><button className="btn" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={!!busy} onClick={go2}>{busy ? 'Lege an…' : 'Anlegen'}</button></>}>
+      {!result ? (
+        <div className="form">
+          <p className="muted full" style={{ margin: 0, fontSize: 13 }}>Legt in devunox Review den Kunden {project.customer_no ? `(${project.customer_no}) ` : ''}mit Feedback-Zugang und dieses Projekt an. Feedback des Kunden erscheint danach automatisch hier als Aufgabe.</p>
+          <Field label="Ansprechpartner (bekommt den Zugang)" span={2}><SelectContact value={v.contact_id} companyId={project.company_id} onChange={(id) => setV({ ...v, contact_id: id })} /></Field>
+          <Field label="Adresse der App (mit Widget)" span={2}><input value={v.app_url} onChange={(e) => setV({ ...v, app_url: e.target.value })} placeholder="https://…" /></Field>
+          <Field label="GitHub-Repo (optional)" span={2}><input value={v.repo_url} onChange={(e) => setV({ ...v, repo_url: e.target.value })} placeholder="https://github.com/HYigit19/…" /></Field>
+        </div>
+      ) : (
+        <div className="stack">
+          <div>Projekt <b>{result.project.slug}</b> ist angelegt{result.client.customer_no ? <> · Kunde <span className="cno">{result.client.customer_no}</span></> : null}.</div>
+          {result.invite_url ? (
+            <>
+              <Field label="Einladungslink für den Kunden (14 Tage gültig)"><input readOnly value={result.invite_url} onFocus={(e) => e.target.select()} /></Field>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn" onClick={() => { navigator.clipboard?.writeText(result.invite_url); toast('Link kopiert'); }}>Link kopieren</button>
+                {result.contact?.email && <button className="btn primary" disabled={!!busy} onClick={sendInvite}>Einladung per Gmail an {result.contact.email}</button>}
+              </div>
+            </>
+          ) : (
+            <div className="muted" style={{ fontSize: 13 }}>{result.contact_has_access ? 'Der Kunde hat bereits einen Zugang zu devunox Review – das neue Projekt ist dort sofort sichtbar.' : 'Kein Kundenzugang angelegt (kein Ansprechpartner mit E-Mail gewählt). Den Zugang kannst du später in devunox Review vergeben.'}</div>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }

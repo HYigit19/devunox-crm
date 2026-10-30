@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { AppEnv, insertRow, pick, uid, updateRow, getSettings } from './util';
 import { getAccessToken, listMailsWith, sendMail, textToHtml, createEvent } from './google';
 import { researchCompany, draftEmail } from './ai';
+import { createCompany } from './work';
 
 export const crmRoutes = new Hono<AppEnv>();
 
@@ -20,7 +21,7 @@ crmRoutes.get('/companies', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT co.*, (SELECT COUNT(*) FROM contacts WHERE company_id = co.id) AS contact_count,
             (SELECT COUNT(*) FROM deals WHERE company_id = co.id AND stage NOT IN ('won','lost')) AS open_deals
-     FROM companies co ${q ? 'WHERE co.name LIKE ?1 OR co.city LIKE ?1 OR co.tags LIKE ?1 OR co.industry LIKE ?1' : ''}
+     FROM companies co ${q ? 'WHERE co.name LIKE ?1 OR co.city LIKE ?1 OR co.tags LIKE ?1 OR co.industry LIKE ?1 OR co.customer_no LIKE ?1' : ''}
      ORDER BY co.name COLLATE NOCASE LIMIT 1000`,
   )
     .bind(...(q ? [`%${q}%`] : []))
@@ -30,8 +31,7 @@ crmRoutes.get('/companies', async (c) => {
 crmRoutes.post('/companies', async (c) => {
   const body = await c.req.json<any>();
   if (!body.name) return c.json({ error: 'Name fehlt' }, 400);
-  const id = uid();
-  await insertRow(c.env.DB, 'companies', { id, ...upperCountry(pick(body, COMPANY_FIELDS)), owner_id: c.get('user').id });
+  const { id } = await createCompany(c.env, upperCountry(pick(body, COMPANY_FIELDS)), c.get('user').id);
   return c.json(await c.env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(id).first());
 });
 crmRoutes.get('/companies/:id', async (c) => {
@@ -146,14 +146,15 @@ crmRoutes.post('/contacts/import', async (c) => {
     if (coName) {
       companyId = coByName.get(coName.toLowerCase()) || null;
       if (!companyId) {
-        companyId = uid();
+        companyId = (
+          await createCompany(
+            c.env,
+            { name: coName, website: r.website || null, industry: r.industry || null, city: r.city || null, country: (r.country || '').toUpperCase().slice(0, 2) || null },
+            userId,
+          )
+        ).id;
         coByName.set(coName.toLowerCase(), companyId);
         companies++;
-        stmts.push(
-          c.env.DB.prepare('INSERT INTO companies (id, name, website, industry, city, country, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(
-            companyId, coName, r.website || null, r.industry || null, r.city || null, (r.country || '').toUpperCase().slice(0, 2) || null, userId,
-          ),
-        );
       }
     }
     if (email) mails.add(email);

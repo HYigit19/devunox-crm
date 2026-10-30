@@ -102,6 +102,14 @@ export function Settings({ me }: { me: Me }) {
             <a className="btn sm" style={{ marginTop: 12 }} href="/auth/login">Google neu verbinden</a>
           </div>
           <div className="card">
+            <h2 style={{ marginBottom: 12 }}>devunox Review</h2>
+            <dl className="dl">
+              <dt>Status</dt><dd>{me.review ? '✓ verbunden' : 'nicht verbunden – Secret REVIEW_WEBHOOK_SECRET fehlt'}</dd>
+              <dt>Adresse</dt><dd>{me.review_url ? <a href={me.review_url} target="_blank" rel="noreferrer">{me.review_url.replace('https://', '')}</a> : '–'}</dd>
+            </dl>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Kunden-Feedback wird automatisch zur Aufgabe im Projekt; Statuswechsel gehen zurück an Review. Zuordnung über die Kundennummer.</p>
+          </div>
+          <div className="card">
             <h2 style={{ marginBottom: 12 }}>KI</h2>
             <dl className="dl">
               <dt>Status</dt><dd>{me.ai ? '✓ aktiv' : 'ANTHROPIC_API_KEY fehlt'}</dd>

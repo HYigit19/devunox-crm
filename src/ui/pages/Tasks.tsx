@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { Empty, Field, Modal, PageHead, Spinner, confirmDel, fmtDate, fmtDateTime, go, useAction, useLoad, useToast } from '../components';
+import { TimeEntries } from './Time';
 
 export const TASK_STATUS: { id: string; label: string; color: string }[] = [
   { id: 'todo', label: 'Offen', color: '#9a9aa5' },
@@ -160,6 +161,10 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
         <div className="stack">
           <input style={{ fontSize: 18, fontWeight: 700, border: 0, padding: '4px 0', boxShadow: 'none' }} value={t.title} onChange={(e) => upd('title', e.target.value)} />
           <textarea rows={5} placeholder="Beschreibung" value={t.description || ''} onChange={(e) => upd('description', e.target.value)} />
+          <div className="card" style={{ background: '#fafafb', boxShadow: 'none', border: '1px solid var(--line)', padding: 14 }}>
+            <h4 style={{ marginBottom: 8 }}>Zeit</h4>
+            <TimeEntries taskId={id} projectId={t.project_id || undefined} companyId={t.company_id || undefined} title={t.title} compact />
+          </div>
           <div>
             <h4 style={{ marginBottom: 8 }}>Verlauf</h4>
             {t.notes.length === 0 ? <div className="muted" style={{ fontSize: 13 }}>Noch keine Einträge.</div> : (
@@ -223,6 +228,7 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
 
 export function TasksPage() {
   const [projects] = useLoad<any[]>('/projects');
+  const [deep, setDeep] = useState<string | null>(() => new URLSearchParams(window.location.hash.split('?')[1] || '').get('open'));
   const [view, setView] = useState<'board' | 'list'>('board');
   const [project, setProject] = useState('');
   const [source, setSource] = useState('');
@@ -256,6 +262,7 @@ export function TasksPage() {
       </div>
       {view === 'board' ? <TaskBoard filter={filter} reloadKey={key} projectId={project || undefined} /> : <TaskList filter={filter} reloadKey={key} />}
       {create && <NewTask projectId={project || undefined} onClose={() => setCreate(false)} onSaved={() => setKey((k) => k + 1)} />}
+      {deep && <TaskDrawer id={deep} onClose={() => { setDeep(null); window.location.hash = '/tasks'; }} onChanged={() => setKey((k) => k + 1)} />}
     </>
   );
 }

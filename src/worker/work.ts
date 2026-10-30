@@ -1,7 +1,25 @@
 import { Hono } from 'hono';
 import { AppEnv, Env, insertRow, pick, uid, updateRow } from './util';
 import { getAccessToken, createEvent } from './google';
-import { pushTaskStatusToReview } from './review';
+import { pushTaskStatusToReview, connectProjectToReview } from './review';
+
+// ======================================================================= Kunden (Kundennummer + Standardordner)
+
+export const STANDARD_FOLDERS = ['/Anfragen/', '/Angebote/', '/Technische Spezifikationen/', '/Verträge/', '/Korrespondenz/', '/Projekte/', '/Berichte/'];
+
+export async function nextCustomerNo(env: Env): Promise<string> {
+  const row = await env.DB.prepare(`INSERT INTO counters (name, year, value) VALUES ('customer', 0, 1) ON CONFLICT(name, year) DO UPDATE SET value = value + 1 RETURNING value`).first<{ value: number }>();
+  return `K-${10000 + row!.value}`;
+}
+
+/** Legt eine Firma mit fortlaufender Kundennummer und Standardordnern an. */
+export async function createCompany(env: Env, data: Record<string, unknown>, userId?: string | null): Promise<{ id: string; customer_no: string }> {
+  const id = uid();
+  const customer_no = await nextCustomerNo(env);
+  await insertRow(env.DB, 'companies', { id, ...data, customer_no, owner_id: userId || null });
+  await env.DB.batch(STANDARD_FOLDERS.map((p) => env.DB.prepare('INSERT OR IGNORE INTO folders (id, company_id, project_id, path) VALUES (?, ?, NULL, ?)').bind(uid(), id, p)));
+  return { id, customer_no };
+}
 
 // ======================================================================= Aufgaben
 
@@ -9,7 +27,7 @@ export const taskRoutes = new Hono<AppEnv>();
 
 const TASK_FIELDS = ['title', 'description', 'status', 'priority', 'category', 'due_at', 'project_id', 'company_id', 'contact_id', 'deal_id', 'quote_id', 'assignee_id', 'sort'];
 const TASK_SELECT = `
-  SELECT t.*, p.name AS project_name, co.name AS company_name,
+  SELECT t.*, p.name AS project_name, co.name AS company_name, co.customer_no,
          TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name,
          (SELECT COUNT(*) FROM activities a WHERE a.task_id = t.id) AS n_notes
   FROM tasks t LEFT JOIN projects p ON p.id = t.project_id LEFT JOIN companies co ON co.id = t.company_id LEFT JOIN contacts ct ON ct.id = t.contact_id`;
@@ -129,7 +147,7 @@ const PROJECT_FIELDS = ['name', 'company_id', 'contact_id', 'quote_id', 'deal_id
 projectRoutes.get('/', async (c) => {
   const company = c.req.query('company_id');
   const { results } = await c.env.DB.prepare(
-    `SELECT p.*, co.name AS company_name, q.number AS quote_number,
+    `SELECT p.*, co.name AS company_name, co.customer_no, q.number AS quote_number,
        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS n_tasks,
        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') AS n_done,
        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'done' AND t.source = 'review') AS n_feedback,
@@ -173,7 +191,7 @@ projectRoutes.post('/', async (c) => {
 
 projectRoutes.get('/:id', async (c) => {
   const p = await c.env.DB.prepare(
-    `SELECT p.*, co.name AS company_name, q.number AS quote_number, q.total AS quote_total, q.currency AS quote_currency,
+    `SELECT p.*, co.name AS company_name, co.customer_no, q.number AS quote_number, q.total AS quote_total, q.currency AS quote_currency,
             TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name
      FROM projects p LEFT JOIN companies co ON co.id = p.company_id LEFT JOIN quotes q ON q.id = p.quote_id LEFT JOIN contacts ct ON ct.id = p.contact_id WHERE p.id = ?`,
   )
@@ -187,6 +205,15 @@ projectRoutes.put('/:id', async (c) => {
   if (data.review_slug) data.review_slug = String(data.review_slug).trim().toLowerCase();
   await updateRow(c.env.DB, 'projects', c.req.param('id'), data);
   return c.json(await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(c.req.param('id')).first());
+});
+
+projectRoutes.post('/:id/review-connect', async (c) => {
+  const body = await c.req.json<any>().catch(() => ({}));
+  try {
+    return c.json(await connectProjectToReview(c.env, c.req.param('id'), body));
+  } catch (e: any) {
+    return c.json({ error: e.message }, 400);
+  }
 });
 
 projectRoutes.delete('/:id', async (c) => {
@@ -267,7 +294,7 @@ docRoutes.get('/', async (c) => {
     args.push(`%${q}%`, `%${q}%`);
   }
   const { results: files } = await c.env.DB.prepare(
-    `SELECT d.id, d.company_id, d.project_id, d.folder, d.name, d.mime, d.size, d.tags, d.source, d.created_at, d.updated_at, co.name AS company_name, p.name AS project_name
+    `SELECT d.id, d.company_id, d.project_id, d.folder, d.name, d.mime, d.size, d.tags, d.source, d.created_at, d.updated_at, co.name AS company_name, co.customer_no, p.name AS project_name
      FROM documents d LEFT JOIN companies co ON co.id = d.company_id LEFT JOIN projects p ON p.id = d.project_id
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY d.folder, d.name COLLATE NOCASE LIMIT 5000`,
   )

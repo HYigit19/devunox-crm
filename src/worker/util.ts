@@ -103,8 +103,8 @@ export async function hmac(secret: string, msg: string): Promise<string> {
 
 // ---------- Einstellungen ----------
 export const DEFAULT_SETTINGS: Record<string, string> = {
-  company_name: 'Devunox Solutions',
-  company_legal: '',
+  company_name: 'devunox AI',
+  company_legal: 'Devunox Solutions',
   company_street: '',
   company_zip: '',
   company_city: '',
@@ -114,7 +114,7 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   company_managing_director: 'Hüseyin Yigit',
   company_email: 'yigit@devunox-consulting.com',
   company_phone: '+49 6142 330 60 55',
-  company_website: 'www.devunox-consulting.com',
+  company_website: 'www.devunox.ai',
   bank_name: '',
   bank_iban: '',
   bank_bic: '',
@@ -129,7 +129,7 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   note_none_de: '',
   note_none_en: '',
   ai_company_profile: 'Devunox Solutions ist ein SAP-Beratungshaus mit Schwerpunkt SAP QM (Quality Management) und S/4HANA. Wir stellen kurzfristig erfahrene Nearshore-Consultants aus Osteuropa, begleitet von deutschen Projektmanagern – zu einem festen Pauschalpreis statt Tagessätzen.',
-  ai_signature: 'Hüseyin Yigit\nCEO & Senior SAP QM Consultant\nDevunox Solutions\n+49 6142 330 60 55\nwww.devunox-consulting.com',
+  ai_signature: 'Hüseyin Yigit\nCEO · devunox AI\nDevunox Solutions\n+49 6142 330 60 55\nwww.devunox.ai',
   tech_profile: 'devunoxAI (Marke der Devunox Solutions) entwickelt individuelle Software: Websites, Web-Apps, Kundenportale, Dashboards und KI-Automatisierungen (z. B. KI-Assistenten, Dokumentenverarbeitung, E-Mail-Automatisierung mit Claude). Bevorzugter Stack: React/TypeScript, Cloudflare Workers, D1-Datenbank, R2-Speicher (EU), Anbindungen per REST-API (Google Workspace, Microsoft 365, SAP, CRM-/ERP-Systeme). Vorgehen agil in 1–2-wöchigen Iterationen mit Demo, Tests und Übergabe inkl. Dokumentation.',
   day_rate: '960',
   day_rate_currency: 'EUR',

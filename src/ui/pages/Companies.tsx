@@ -7,6 +7,8 @@ import { DealForm } from './Pipeline';
 import { TaskBoard } from './Tasks';
 import { DocBrowser } from './Documents';
 import { ProjectCards, ProjectForm } from './Projects';
+import { TimeEntries, fmtHours } from './Time';
+import { TaskDrawer } from './Tasks';
 
 export function CompanyForm({ initial, onClose, onSaved }: { initial?: any; onClose: () => void; onSaved: (c: any) => void }) {
   const { v, set } = useForm({
@@ -62,7 +64,7 @@ export function CompaniesList() {
     <>
       <PageHead title="Firmen" sub={list ? `${list.length} Firmen` : ''} actions={<button className="btn primary" onClick={() => setForm(true)}>+ Firma</button>} />
       <div className="toolbar">
-        <input className="search" placeholder="Suchen nach Name, Ort, Branche, Tag…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="search" placeholder="Suchen nach Name, Kundennr., Ort, Branche, Tag…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="card flush">
         {!list ? (
@@ -73,11 +75,12 @@ export function CompaniesList() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Name</th><th className="hide-m">Branche</th><th>Ort</th><th className="num">Kontakte</th><th className="num">Offene Deals</th><th className="hide-m">Tags</th></tr>
+                <tr><th>Kundennr.</th><th>Name</th><th className="hide-m">Branche</th><th>Ort</th><th className="num">Kontakte</th><th className="num">Offene Deals</th><th className="hide-m">Tags</th></tr>
               </thead>
               <tbody>
                 {list.map((c) => (
                   <tr key={c.id} className="click" onClick={() => go(`/companies/${c.id}`)}>
+                    <td><span className="cno">{c.customer_no || '–'}</span></td>
                     <td><b>{c.name}</b></td>
                     <td className="hide-m">{c.industry || '–'}</td>
                     <td>{[c.city, c.country].filter(Boolean).join(', ') || '–'}</td>
@@ -101,7 +104,7 @@ export function CompanyDetail({ id }: { id: string }) {
   const [edit, setEdit] = useState(false);
   const [newContact, setNewContact] = useState(false);
   const [newDeal, setNewDeal] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'projects' | 'tasks' | 'docs'>('overview');
+  const [tab, setTab] = useState<'file' | 'overview' | 'projects' | 'tasks' | 'docs' | 'time'>('file');
   const [newProject, setNewProject] = useState(false);
   const [projects, reloadProjects] = useLoad<any[]>(`/projects?company_id=${id}`);
   const { busy, run } = useAction();
@@ -120,7 +123,7 @@ export function CompanyDetail({ id }: { id: string }) {
     <>
       <PageHead
         back="#/companies"
-        title={c.name}
+        title={<span style={{ display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>{c.name} {c.customer_no && <span className="cno lg">{c.customer_no}</span>}</span>}
         sub={[c.industry, [c.city, c.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
         actions={
           <>
@@ -131,11 +134,15 @@ export function CompanyDetail({ id }: { id: string }) {
         }
       />
       <div className="tabs">
-        <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>Übersicht</button>
+        <button className={tab === 'file' ? 'active' : ''} onClick={() => setTab('file')}>Kundenakte</button>
+        <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>Kontakte & Angebote</button>
         <button className={tab === 'projects' ? 'active' : ''} onClick={() => setTab('projects')}>Projekte <span className="n">{projects?.length ?? ''}</span></button>
         <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Aufgaben</button>
         <button className={tab === 'docs' ? 'active' : ''} onClick={() => setTab('docs')}>Dokumente</button>
+        <button className={tab === 'time' ? 'active' : ''} onClick={() => setTab('time')}>Zeiten</button>
       </div>
+      {tab === 'file' && <CustomerFile id={id} onTab={(t) => setTab(t as any)} />}
+      {tab === 'time' && <div className="card"><TimeEntries companyId={id} title={c.name} /></div>}
       {tab === 'projects' && (
         <div className="stack">
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button className="btn primary" onClick={() => setNewProject(true)}>+ Projekt</button></div>
@@ -220,5 +227,91 @@ export function CompanyDetail({ id }: { id: string }) {
       {newContact && <ContactForm initial={{ company_id: id, country: c.country }} onClose={() => setNewContact(false)} onSaved={reload} />}
       {newDeal && <DealForm initial={{ company_id: id, contact_id: c.contacts[0]?.id }} onClose={() => setNewDeal(false)} onSaved={reload} />}
     </>
+  );
+}
+
+const EV: Record<string, [string, string, string]> = {
+  quote: ['Angebot', '◧', 'tint-orange'],
+  won: ['Gewonnen', '✓', 'tint-green'],
+  lost: ['Verloren', '✕', 'tint-ink'],
+  task: ['Aufgabe', '☐', 'tint-ink'],
+  feedback: ['Feedback', '◉', 'tint-violet'],
+  done: ['Erledigt', '✓', 'tint-green'],
+  doc: ['Dokument', '▤', 'tint-rust'],
+  time: ['Zeit', '⏱', 'tint-orange'],
+  mail: ['E-Mail', '✉', 'tint-ink'],
+  note: ['Notiz', '✎', 'tint-ink'],
+  project: ['Projekt', '▰', 'tint-ink'],
+};
+const FILTERS: [string, string, string[]][] = [
+  ['all', 'Alles', []],
+  ['quote', 'Angebote', ['quote', 'won', 'lost']],
+  ['work', 'Arbeit', ['task', 'feedback', 'done', 'project']],
+  ['time', 'Zeiten', ['time']],
+  ['doc', 'Dokumente', ['doc']],
+  ['comm', 'Kommunikation', ['mail', 'note']],
+];
+
+/** Kundenakte: alle Angebote, Spezifikationen, Dokumente, Aufgaben, Feedback und Zeiten eines Kunden auf einer Zeitleiste */
+function CustomerFile({ id, onTab }: { id: string; onTab: (t: string) => void }) {
+  const [d] = useLoad<any>(`/companies/${id}/file`);
+  const [f, setF] = useState('all');
+  const [open, setOpen] = useState<string | null>(null);
+  if (!d) return <Spinner />;
+  const st = d.stats;
+  const kinds = FILTERS.find((x) => x[0] === f)![2];
+  const events = d.events.filter((e: any) => !kinds.length || kinds.includes(e.kind));
+  return (
+    <div className="grid side">
+      <div className="card">
+        <div className="card-head">
+          <h2>Zeitleiste</h2>
+          <div className="seg">{FILTERS.map(([k, l]) => <button key={k} className={f === k ? 'active' : ''} onClick={() => setF(k)}>{l}</button>)}</div>
+        </div>
+        {events.length === 0 ? <Empty title="Noch nichts passiert" text="Angebote, Dokumente, Aufgaben, Feedback und Zeiten dieses Kunden erscheinen hier chronologisch." /> : (
+          <div className="timeline">
+            {events.map((e: any, i: number) => {
+              const [label, icon, tint] = EV[e.kind] || ['', '•', 'tint-ink'];
+              const clickable = e.link || e.ref;
+              return (
+                <div className="tl-item" key={i} style={{ cursor: clickable ? 'pointer' : undefined }}
+                  onClick={() => { if (e.ref) setOpen(e.ref); else if (e.link?.startsWith('#')) window.location.hash = e.link.slice(1); else if (e.link) window.open(e.link, '_blank'); }}>
+                  <div className={`tl-dot ${tint}`}>{icon}</div>
+                  <div className="tl-body">
+                    <div className="tl-title">{e.title}</div>
+                    <div className="tl-meta">{label} · {fmtDate(e.at)}{e.detail ? ` · ${e.detail}` : ''}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="stack">
+        <div className="card" style={{ background: 'var(--ink)', color: '#fff' }}>
+          <div style={{ fontSize: 12, color: '#b9b9c3', letterSpacing: '.08em', textTransform: 'uppercase' }}>Kundennummer</div>
+          <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--orange)', letterSpacing: '-.02em' }}>{d.company.customer_no || '–'}</div>
+          <div style={{ fontSize: 13, color: '#b9b9c3' }}>Kunde seit {fmtDate(d.company.created_at)}</div>
+        </div>
+        <div className="grid c2" style={{ gap: 12 }}>
+          <div className="card kpi" style={{ padding: 16 }}><div className="label">Umsatz gewonnen</div><div className="value" style={{ fontSize: 20 }}>{fmtMoney(st.won)}</div><div className="meta">{st.quotes} Angebote · {st.open_quotes} offen</div></div>
+          <div className="card kpi" style={{ padding: 16, cursor: 'pointer' }} onClick={() => onTab('time')}><div className="label">Erfasste Zeit</div><div className="value" style={{ fontSize: 20 }}>{fmtHours(st.minutes)}</div><div className="meta">{fmtHours(st.billable_minutes)} abrechenbar</div></div>
+          <div className="card kpi" style={{ padding: 16, cursor: 'pointer' }} onClick={() => onTab('tasks')}><div className="label">Aufgaben</div><div className="value" style={{ fontSize: 20 }}>{st.tasks_open}</div><div className="meta">offen · {st.tasks_done} erledigt · {st.feedback_open} Feedback</div></div>
+          <div className="card kpi" style={{ padding: 16, cursor: 'pointer' }} onClick={() => onTab('docs')}><div className="label">Dokumente</div><div className="value" style={{ fontSize: 20 }}>{st.documents}</div><div className="meta">{st.projects} laufende Projekte</div></div>
+        </div>
+        {d.time_by_project.length > 0 && (
+          <div className="card">
+            <h2 style={{ marginBottom: 10 }}>Zeit je Projekt</h2>
+            {d.time_by_project.map((r: any) => (
+              <div key={r.project} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span>{r.project}</span><b>{fmtHours(r.minutes)}</b></div>
+                <div className="bar" style={{ marginTop: 4 }}><div style={{ width: `${(r.minutes / Math.max(1, st.minutes)) * 100}%` }} /></div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {open && <TaskDrawer id={open} onClose={() => setOpen(null)} onChanged={() => {}} />}
+    </div>
   );
 }

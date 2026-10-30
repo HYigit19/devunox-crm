@@ -52,7 +52,7 @@ async function refreshTotals(db: D1Database, id: string) {
 
 export async function loadQuote(env: Env, id: string) {
   const q = await env.DB.prepare(
-    `SELECT q.*, co.name AS company_name, TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name, ct.email AS contact_email
+    `SELECT q.*, co.name AS company_name, co.customer_no, TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name, ct.email AS contact_email
      FROM quotes q LEFT JOIN companies co ON co.id = q.company_id LEFT JOIN contacts ct ON ct.id = q.contact_id WHERE q.id = ?`,
   )
     .bind(id)
@@ -62,7 +62,7 @@ export async function loadQuote(env: Env, id: string) {
   return { ...q, items, totals: computeTotals(items, q.discount_pct, q.tax_mode) };
 }
 
-async function buildPdf(env: Env, id: string) {
+export async function buildPdf(env: Env, id: string) {
   const q = await loadQuote(env, id);
   if (!q) throw new Error('Angebot nicht gefunden');
   const s = await getSettings(env.DB);
@@ -89,6 +89,7 @@ async function buildPdf(env: Env, id: string) {
     discount_pct: q.discount_pct,
     items: q.items,
     totals: q.totals,
+    customer_no: company?.customer_no || '',
     buyer: {
       company: company?.name,
       contact: contact ? [contact.salutation, contact.first_name, contact.last_name].filter(Boolean).join(' ') : null,
@@ -100,8 +101,7 @@ async function buildPdf(env: Env, id: string) {
     },
     seller: { ...s, company_country: countryName(s.company_country) },
   });
-  const safe = (q.company_name || 'Kunde').replace(/[^\w\-äöüÄÖÜß ]+/g, '').trim().replace(/\s+/g, '_');
-  return { bytes, filename: `${q.language === 'en' ? 'Proposal' : 'Angebot'}_${q.number}_${safe}.pdf`, quote: q };
+  return { bytes, filename: `${company?.customer_no ? company.customer_no + '_' : ''}${q.language === 'en' ? 'Proposal' : 'Angebot'}_${q.number}.pdf`, quote: q };
 }
 
 async function uploadTechToDrive(env: Env, token: string, folder: string, quoteId: string) {
@@ -130,7 +130,7 @@ quoteRoutes.get('/', async (c) => {
   }
   const { results } = await c.env.DB.prepare(
     `SELECT q.id, q.number, q.title, q.status, q.currency, q.total, q.issue_date, q.valid_until, q.sent_at, q.company_id, q.contact_id, q.deal_id,
-            co.name AS company_name, TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name
+            co.name AS company_name, co.customer_no, TRIM(COALESCE(ct.first_name,'') || ' ' || COALESCE(ct.last_name,'')) AS contact_name
      FROM quotes q LEFT JOIN companies co ON co.id = q.company_id LEFT JOIN contacts ct ON ct.id = q.contact_id
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY q.created_at DESC LIMIT 500`,
   )
@@ -235,6 +235,14 @@ quoteRoutes.post('/:id/status', async (c) => {
       .bind(status === 'accepted' ? 'won' : 'lost', status === 'accepted' ? 100 : 0, q.deal_id)
       .run();
   }
+  if (status === 'accepted' && q?.company_id) {
+    try {
+      const pdf = await buildPdf(c.env, id);
+      await storeDocument(c.env, { company_id: q.company_id, folder: '/Angebote/', name: pdf.filename, data: pdf.bytes, mime: 'application/pdf', source: 'quote', userId: c.get('user').id });
+    } catch {
+      /* nicht kritisch */
+    }
+  }
   await c.env.DB.prepare(`INSERT INTO activities (id, type, subject, company_id, contact_id, deal_id, quote_id, done, created_by) VALUES (?, 'system', ?, ?, ?, ?, ?, 1, ?)`)
     .bind(uid(), `Angebot ${q.number}: ${({ draft: 'Entwurf', sent: 'versendet', accepted: 'angenommen', rejected: 'abgelehnt', expired: 'abgelaufen' } as Record<string, string>)[status]}`, q.company_id, q.contact_id, q.deal_id, id, c.get('user').id)
     .run();
@@ -274,7 +282,7 @@ quoteRoutes.get('/:id/mail-draft', async (c) => {
     : en ? 'Dear Sir or Madam,' : 'Sehr geehrte Damen und Herren,';
   const total = money(q.total, q.currency, en ? 'en' : 'de');
   const hasTech = !!(await loadTech(c.env, q.id));
-  const techLine = hasTech ? (en ? ' together with the technical proposal' : ' zusammen mit dem technischen Angebot') : '';
+  const techLine = hasTech ? (en ? ' together with the technical specification' : ' zusammen mit der technischen Spezifikation') : '';
   const body = en
     ? `${greet}\n\nplease find attached our proposal ${q.number}${q.title ? ` – ${q.title}` : ''} (total ${total})${techLine}.\n\nI would be happy to walk you through it in a short call. Just reply to this email with a convenient time.\n\n${s.ai_signature}`
     : `${greet}\n\nanbei erhalten Sie unser Angebot ${q.number}${q.title ? ` – ${q.title}` : ''} über ${total}${techLine}.\n\nGerne gehe ich es in einem kurzen Termin mit Ihnen durch – antworten Sie einfach mit einem passenden Zeitpunkt.\n\n${s.ai_signature}`;
@@ -319,7 +327,7 @@ quoteRoutes.post('/:id/send', async (c) => {
   try {
     if (quote.company_id) {
       await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: filename, data: bytes, mime: 'application/pdf', source: 'quote', userId: user.id });
-      if (tech) await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: tech.filename, data: tech.bytes, mime: 'application/pdf', source: 'tech', userId: user.id });
+      if (tech) await storeDocument(c.env, { company_id: quote.company_id, folder: '/Technische Spezifikationen/', name: tech.filename, data: tech.bytes, mime: 'application/pdf', source: 'tech', userId: user.id });
     }
   } catch {
     /* Ablage nicht kritisch */
@@ -347,6 +355,6 @@ quoteRoutes.post('/:id/archive', async (c) => {
   if (!quote.company_id) return c.json({ error: 'Bitte zuerst eine Firma wählen.' }, 400);
   await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: filename, data: bytes, mime: 'application/pdf', source: 'quote', userId: c.get('user').id });
   const tech = await buildTechPdf(c.env, id);
-  if (tech) await storeDocument(c.env, { company_id: quote.company_id, folder: '/Angebote/', name: tech.filename, data: tech.bytes, mime: 'application/pdf', source: 'tech', userId: c.get('user').id });
+  if (tech) await storeDocument(c.env, { company_id: quote.company_id, folder: '/Technische Spezifikationen/', name: tech.filename, data: tech.bytes, mime: 'application/pdf', source: 'tech', userId: c.get('user').id });
   return c.json({ ok: true });
 });

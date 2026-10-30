@@ -286,19 +286,19 @@ export function DocumentsPage() {
   const [companies] = useLoad<any[]>('/companies');
   const [cid, setCid] = useState<string>('');
   const [q, setQ] = useState('');
-  const list = (companies || []).filter((c) => c.name.toLowerCase().includes(q.toLowerCase()));
+  const list = (companies || []).filter((c) => (c.name + ' ' + (c.customer_no || '')).toLowerCase().includes(q.toLowerCase()));
   const current = companies?.find((c) => c.id === cid);
   return (
     <>
       <PageHead title="Dokumente" sub="Ablage je Kunde – Ordner, Drag & Drop, Tags. Versendete Angebote landen automatisch im Ordner „Angebote“." />
       <div className="grid" style={{ gridTemplateColumns: '280px minmax(0,1fr)', alignItems: 'start' }}>
         <div className="card" style={{ padding: 12 }}>
-          <input placeholder="Kunde suchen…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 8 }} />
+          <input placeholder="Kunde oder Kundennr. …" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 8 }} />
           <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {!companies ? <Spinner /> : list.length === 0 ? <div className="muted" style={{ padding: 8, fontSize: 13 }}>Keine Kunden.</div> : list.map((c) => (
               <button key={c.id} onClick={() => setCid(c.id)} className="btn ghost" style={{ width: '100%', justifyContent: 'flex-start', background: c.id === cid ? 'var(--ink)' : undefined, color: c.id === cid ? '#fff' : undefined, marginBottom: 2 }}>
                 <span className="ficon folder" style={{ width: 26, height: 26, flex: '0 0 26px', fontSize: 12 }}>▰</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{c.name}<span style={{ display: 'block', fontSize: 11, opacity: 0.6, fontWeight: 500 }}>{c.customer_no}</span></span>
               </button>
             ))}
           </div>
@@ -306,7 +306,7 @@ export function DocumentsPage() {
         <div className="card">
           {current ? (
             <>
-              <div className="card-head"><h2>{current.name}</h2><a href={`#/companies/${current.id}`} className="btn sm ghost">Zur Firma →</a></div>
+              <div className="card-head"><h2>{current.name} <span className="cno">{current.customer_no}</span></h2><a href={`#/companies/${current.id}`} className="btn sm ghost">Zur Firma →</a></div>
               <DocBrowser key={current.id} companyId={current.id} />
             </>
           ) : (

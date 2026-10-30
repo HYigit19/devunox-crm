@@ -124,8 +124,10 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
 
   const aiDraft = () =>
     run('ai', async () => {
-      const r = await api.post('/quotes/ai-draft', { request: aiText, language: q.language, currency: q.currency, customer: q.company_name });
-      setQ((o: any) => ({ ...o, title: r.title || o.title, intro: r.intro || o.intro, outro: r.outro || o.outro }));
+      const r = await api.post('/quotes/ai-draft', { request: aiText, currency: q.currency, customer: q.company_name });
+      const lang = r.language === 'en' || r.language === 'de' ? r.language : q.language;
+      setQ((o: any) => ({ ...o, language: lang, title: r.title || o.title, intro: r.intro || settings?.[`quote_intro_${lang}`] || o.intro, outro: r.outro || settings?.[`quote_outro_${lang}`] || o.outro }));
+      if (lang !== q.language) toast(lang === 'en' ? 'Projektbeschreibung ist Englisch – Angebot auf Englisch umgestellt' : 'Projektbeschreibung ist Deutsch – Angebot auf Deutsch umgestellt');
       setItems((r.items || []).map((i: any) => ({ name: i.name, description: i.description || '', qty: i.qty || 1, unit: i.unit || '', unit_price: i.unit_price || 0, discount_pct: 0, tax_rate: defRate, product_id: i.product_id || null })));
       setDirty(true);
     }, 'KI-Entwurf eingefügt – bitte prüfen und speichern');
@@ -140,7 +142,7 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
       <PageHead
         back="#/quotes"
         title={<>{q.number} <Badge map={QUOTE_STATUS} value={q.status} /></>}
-        sub={q.company_name ? <a href={`#/companies/${q.company_id}`}>{q.company_name}</a> : 'Kein Kunde gewählt'}
+        sub={q.company_name ? <>{q.customer_no && <span className="cno" style={{ marginRight: 8 }}>{q.customer_no}</span>}<a href={`#/companies/${q.company_id}`}>{q.company_name}</a></> : 'Kein Kunde gewählt'}
         actions={
           <>
             {dirty && <button className="btn primary" disabled={!!busy} onClick={() => run('s', () => save())}>Speichern</button>}
@@ -320,7 +322,7 @@ function SendQuote({ id, onClose, onSent }: { id: string; onClose: () => void; o
           <Field label="Betreff" span={2}><input value={m.subject} onChange={(e) => setM({ ...m, subject: e.target.value })} /></Field>
           <Field label="Nachricht" span={2}><textarea rows={12} value={m.body} onChange={(e) => setM({ ...m, body: e.target.value })} /></Field>
           <div className="full muted" style={{ fontSize: 13 }}>📎 Das Angebot wird als PDF angehängt.</div>
-          {m.hasTech && <label className="check full"><input type="checkbox" checked={tech} onChange={(e) => setTech(e.target.checked)} /> Technisches Angebot als zweites PDF anhängen</label>}
+          {m.hasTech && <label className="check full"><input type="checkbox" checked={tech} onChange={(e) => setTech(e.target.checked)} /> Technische Spezifikation als zweites PDF anhängen</label>}
           <label className="check full"><input type="checkbox" checked={drive} onChange={(e) => setDrive(e.target.checked)} /> PDF zusätzlich in Google Drive ablegen (Ordner „Devunox CRM/Angebote“)</label>
         </div>
       )}
@@ -349,7 +351,7 @@ function TechCard({ quoteId, currency, onRecalc }: { quoteId: string; currency: 
   const count = (f: string) => d.requirements.filter((r: any) => r.fit === f).length;
   return (
     <div className="card ai-box">
-      <div className="card-head"><h2>✦ Technisches Angebot</h2></div>
+      <div className="card-head"><h2>✦ Technische Spezifikation</h2></div>
       <div style={{ fontSize: 13.5 }}>
         <b>{d.requirements.length}</b> Anforderungen · <b>{e.total}</b> PT gesamt ({e.dev} Entwicklung + {e.pm} PM)
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
@@ -382,7 +384,7 @@ function TechEditor({ quoteId, tp, onClose, onSaved }: { quoteId: string; tp: an
     onClose();
   }, recalc ? 'Gespeichert – Angebotspositionen neu berechnet' : 'Technisches Angebot gespeichert');
   return (
-    <Modal wide title="Technisches Angebot bearbeiten" onClose={onClose} footer={
+    <Modal wide title="Technische Spezifikation bearbeiten" onClose={onClose} footer={
       <>
         <span className="muted" style={{ marginRight: 'auto', fontSize: 13 }}>{e.dev} PT + {e.pm} PT PM = <b>{e.total} PT</b></span>
         <button className="btn" onClick={onClose}>Abbrechen</button>

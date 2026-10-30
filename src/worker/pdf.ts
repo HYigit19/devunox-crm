@@ -15,6 +15,7 @@ export type QuoteDoc = {
   outro?: string | null;
   discount_pct?: number | null;
   items: DocItem[];
+  customer_no?: string;
   totals: { subtotal: number; discount: number; net: number; taxes: { rate: number; amount: number }[]; tax_total: number; total: number };
   buyer: { company?: string | null; contact?: string | null; street?: string | null; zip?: string | null; city?: string | null; country?: string | null; vat_id?: string | null };
   seller: Record<string, string>;
@@ -22,7 +23,7 @@ export type QuoteDoc = {
 
 const L = {
   de: {
-    quote: 'Angebot', number: 'Angebotsnr.', date: 'Datum', valid: 'Gültig bis', vat: 'USt-IdNr.', pos: 'Pos.', desc: 'Beschreibung', qty: 'Menge',
+    quote: 'Angebot', number: 'Angebotsnr.', customer: 'Kundennr.', date: 'Datum', valid: 'Gültig bis', vat: 'USt-IdNr.', pos: 'Pos.', desc: 'Beschreibung', qty: 'Menge',
     price: 'Einzelpreis', total: 'Gesamt', subtotal: 'Zwischensumme', discount: 'Rabatt', net: 'Nettobetrag', tax: 'MwSt.', gross: 'Gesamtbetrag',
     page: 'Seite', md: 'Geschäftsführer', reg: 'Register', bank: 'Bank',
     rc: 'Reverse Charge – Steuerschuldnerschaft des Leistungsempfängers (Art. 196 MwStSystRL). Die Umsatzsteuer wird vom Leistungsempfänger geschuldet.',
@@ -30,7 +31,7 @@ const L = {
     allnet: 'Alle Preise netto zzgl. gesetzlicher Umsatzsteuer.',
   },
   en: {
-    quote: 'Proposal', number: 'Proposal no.', date: 'Date', valid: 'Valid until', vat: 'VAT ID', pos: 'Item', desc: 'Description', qty: 'Qty',
+    quote: 'Proposal', number: 'Proposal no.', customer: 'Customer no.', date: 'Date', valid: 'Valid until', vat: 'VAT ID', pos: 'Item', desc: 'Description', qty: 'Qty',
     price: 'Unit price', total: 'Amount', subtotal: 'Subtotal', discount: 'Discount', net: 'Net amount', tax: 'VAT', gross: 'Total',
     page: 'Page', md: 'Managing Director', reg: 'Register', bank: 'Bank',
     rc: 'Reverse charge – VAT to be accounted for by the recipient (Art. 196 Council Directive 2006/112/EC).',
@@ -177,6 +178,7 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
 
   // Meta rechts
   const meta: [string, string][] = [
+    ...(d.customer_no ? ([[t.customer, d.customer_no]] as [string, string][]) : []),
     [t.number, d.number],
     [t.date, fmtDate(d.issue_date, d.language)],
   ];

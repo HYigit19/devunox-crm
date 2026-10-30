@@ -3,6 +3,7 @@
 // CRM → Review: Statusänderung einer Review-Aufgabe wird an Review zurückgemeldet (POST /api/integrations/crm/status).
 import { Hono } from 'hono';
 import { AppEnv, Env, uid } from './util';
+import { createCompany } from './work';
 
 const enc = new TextEncoder();
 
@@ -35,7 +36,7 @@ const REVIEW_STATUS_DE: Record<string, string> = { offen: 'Offen', in_arbeit: 'I
 type ReviewEvent = {
   event: 'item.created' | 'item.comment' | 'item.status' | 'ping';
   project: { id: number; slug: string; name: string; app_url?: string; hub_url?: string };
-  client?: { id: number; name: string };
+  client?: { id: number; name: string; customer_no?: string | null };
   item?: { id: number; no: number; kind: string; title: string; body?: string; category?: string; priority?: string; status: string; page_url?: string; internal?: boolean; link?: string };
   author?: { name: string; email?: string; role: string };
   comment?: string;
@@ -46,15 +47,15 @@ async function ensureProject(env: Env, ev: ReviewEvent) {
   const slug = ev.project.slug.toLowerCase();
   let p = await env.DB.prepare('SELECT * FROM projects WHERE review_slug = ?').bind(slug).first<any>();
   if (p) return p;
-  // Firma über den Kundennamen zuordnen oder anlegen
+  // Firma zuordnen: 1. Kundennummer, 2. Review-Kunden-ID, 3. Name – sonst anlegen
   let companyId: string | null = null;
-  if (ev.client?.name) {
-    const co = await env.DB.prepare('SELECT id FROM companies WHERE LOWER(name) = LOWER(?)').bind(ev.client.name.trim()).first<any>();
-    companyId = co?.id || null;
-    if (!companyId) {
-      companyId = uid();
-      await env.DB.prepare(`INSERT INTO companies (id, name, tags) VALUES (?, ?, 'Review-Kunde')`).bind(companyId, ev.client.name.trim()).run();
-    }
+  if (ev.client) {
+    const byNo = ev.client.customer_no ? await env.DB.prepare('SELECT id FROM companies WHERE customer_no = ?').bind(ev.client.customer_no).first<any>() : null;
+    const byRid = byNo ? null : await env.DB.prepare('SELECT id FROM companies WHERE review_client_id = ?').bind(ev.client.id).first<any>();
+    const byName = byNo || byRid ? null : await env.DB.prepare('SELECT id FROM companies WHERE LOWER(name) = LOWER(?)').bind((ev.client.name || '').trim()).first<any>();
+    companyId = byNo?.id || byRid?.id || byName?.id || null;
+    if (!companyId && ev.client.name) companyId = (await createCompany(env, { name: ev.client.name.trim(), tags: 'Review-Kunde' })).id;
+    if (companyId) await env.DB.prepare('UPDATE companies SET review_client_id = ? WHERE id = ? AND review_client_id IS NULL').bind(ev.client.id, companyId).run();
   }
   const id = uid();
   await env.DB.prepare(`INSERT INTO projects (id, name, company_id, status, review_slug, review_url, app_url) VALUES (?, ?, ?, 'active', ?, ?, ?)`)
@@ -152,3 +153,44 @@ export async function pushTaskStatusToReview(env: Env, task: any, status: string
 }
 
 export { sign as signPayload };
+
+/** Legt Kunde (über die Kundennummer), Kundenzugang und Projekt in devunox Review an und verknüpft es mit dem CRM-Projekt. */
+export async function connectProjectToReview(env: Env, projectId: string, opts: { contact_id?: string | null; app_url?: string | null; repo_url?: string | null }) {
+  if (!env.REVIEW_URL || !env.REVIEW_WEBHOOK_SECRET) throw new Error('devunox Review ist nicht verbunden (REVIEW_URL / REVIEW_WEBHOOK_SECRET fehlen).');
+  const p = await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
+  if (!p) throw new Error('Projekt nicht gefunden');
+  if (!p.company_id) throw new Error('Bitte dem Projekt zuerst einen Kunden zuordnen.');
+  const co = await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(p.company_id).first<any>();
+  const contactId = opts.contact_id || p.contact_id;
+  const ct = contactId ? await env.DB.prepare('SELECT * FROM contacts WHERE id = ?').bind(contactId).first<any>() : null;
+  const body = JSON.stringify({
+    customer_no: co.customer_no,
+    company_name: co.name,
+    contact_name: ct ? [ct.first_name, ct.last_name].filter(Boolean).join(' ') : '',
+    contact_email: ct?.email || '',
+    lang: ct?.language === 'en' ? 'en' : 'de',
+    project_name: p.name,
+    description: p.description || '',
+    app_url: opts.app_url || p.app_url || '',
+    repo_url: opts.repo_url || '',
+    slug: p.review_slug || undefined,
+  });
+  const ts = String(Math.floor(Date.now() / 1000));
+  const res = await fetch(`${env.REVIEW_URL.replace(/\/$/, '')}/api/integrations/crm/project`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-devunox-timestamp': ts, 'x-devunox-signature': await sign(env.REVIEW_WEBHOOK_SECRET, ts, body) },
+    body,
+  });
+  const data = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok) throw new Error('devunox Review: ' + (data.error || res.status));
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE projects SET review_slug = ?, review_url = ?, app_url = COALESCE(?, app_url), contact_id = COALESCE(contact_id, ?), updated_at = datetime('now') WHERE id = ?`).bind(
+      data.project.slug, data.hub_url, opts.app_url || null, contactId || null, projectId,
+    ),
+    env.DB.prepare('UPDATE companies SET review_client_id = ? WHERE id = ?').bind(data.client.id, co.id),
+    env.DB.prepare(`INSERT INTO activities (id, type, subject, body, company_id, project_id, done) VALUES (?, 'system', ?, ?, ?, ?, 1)`).bind(
+      uid(), 'Projekt in devunox Review angelegt', data.invite_url ? `Kundenzugang für ${ct?.email} erstellt` : 'Bestehender Kundenzugang', co.id, projectId,
+    ),
+  ]);
+  return { ...data, contact: ct ? { id: ct.id, email: ct.email, name: [ct.first_name, ct.last_name].filter(Boolean).join(' '), language: ct.language } : null };
+}

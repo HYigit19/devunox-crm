@@ -35,7 +35,7 @@ export const FIT = {
 
 const T = {
   de: {
-    doc: 'Technisches Angebot', ref: 'zu Angebot', date: 'Datum', customer: 'Kunde', summary: '1. Ausgangslage', objectives: 'Ziele',
+    doc: 'Technische Spezifikation', ref: 'zu Angebot', custNo: 'Kundennr.', date: 'Datum', customer: 'Kunde', summary: '1. Ausgangslage', objectives: 'Ziele',
     solution: '2. Lösungsansatz', architecture: 'Architektur', stack: 'Technologie', area: 'Bereich', tech: 'Technologie',
     matrix: '3. Anforderungen und Bewertung (Fit/Gap)', no: 'Nr.', req: 'Anforderung', fit: 'Bewertung', sol: 'Lösung', days: 'PT',
     legend: 'PT = Personentage. Standard = mit vorhandenen Bausteinen abgedeckt · Anpassung = Konfiguration/Anpassung bestehender Komponenten · Neuentwicklung = individuelle Entwicklung.',
@@ -45,7 +45,7 @@ const T = {
     days_unit: 'PT', wk: 'Wochen',
   },
   en: {
-    doc: 'Technical Proposal', ref: 'for proposal', date: 'Date', customer: 'Customer', summary: '1. Background', objectives: 'Objectives',
+    doc: 'Technical Specification', ref: 'for proposal', custNo: 'Customer no.', date: 'Date', customer: 'Customer', summary: '1. Background', objectives: 'Objectives',
     solution: '2. Solution approach', architecture: 'Architecture', stack: 'Technology', area: 'Area', tech: 'Technology',
     matrix: '3. Requirements and assessment (fit/gap)', no: 'No.', req: 'Requirement', fit: 'Assessment', sol: 'Solution', days: 'PD',
     legend: 'PD = person days. Standard = covered by existing components · Configuration = configuration/adaptation of existing components · Custom development = individual development.',
@@ -73,7 +73,7 @@ export function packageEffort(p: TechProposal, pmPct: number) {
 }
 
 export async function renderTechPdf(o: {
-  p: TechProposal; lang: 'de' | 'en'; quoteNumber: string; date: string; customer: string; seller: Record<string, string>; pmPct: number;
+  p: TechProposal; lang: 'de' | 'en'; quoteNumber: string; date: string; customer: string; customerNo?: string; seller: Record<string, string>; pmPct: number;
 }): Promise<Uint8Array> {
   const { p, lang, seller: s } = o;
   const t = T[lang];
@@ -173,6 +173,7 @@ export async function renderTechPdf(o: {
   y -= 8;
   const meta: [string, string][] = [
     [t.customer, o.customer],
+    ...(o.customerNo ? ([[t.custNo, o.customerNo]] as [string, string][]) : []),
     [t.ref, o.quoteNumber],
     [t.date, fmtDate(o.date, lang)],
   ];

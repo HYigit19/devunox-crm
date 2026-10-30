@@ -14,7 +14,7 @@ type Customer = {
   language?: 'de' | 'en';
   requirements: { ref: string; title: string; description?: string; priority?: string | null; category?: string }[];
 };
-type Result = { quote_id: string; number: string; company: string; total: number; net: number; currency: string; days: number; requirements: number };
+type Result = { quote_id: string; number: string; company: string; company_id: string; customer_no?: string; language?: string; total: number; net: number; currency: string; days: number; requirements: number };
 
 const cellText = (v: unknown): string => {
   if (v === null || v === undefined) return '';
@@ -41,6 +41,7 @@ function sheetsToText(sheets: Sheet[]) {
 export function ExcelImport({ me }: { me: Me }) {
   const [settings] = useLoad<Record<string, string>>('/settings');
   const [file, setFile] = useState<string>('');
+  const [rawFile, setRawFile] = useState<File | null>(null);
   const [sheets, setSheets] = useState<Sheet[] | null>(null);
   const [opts, setOpts] = useState<{ language: string; currency: string; day_rate: string; pm_pct: string; hints: string } | null>(null);
   const [phase, setPhase] = useState<'upload' | 'analyzing' | 'review' | 'generating' | 'done'>('upload');
@@ -69,6 +70,7 @@ export function ExcelImport({ me }: { me: Me }) {
       sh = sh.filter((s) => s.rows.some((r) => r.some((c) => c)));
       if (!sh.length) return toast('Die Datei ist leer.', 'err');
       setFile(f.name);
+      setRawFile(f);
       setSheets(sh);
       setAnalysis(null);
       setPhase('upload');
@@ -105,6 +107,15 @@ export function ExcelImport({ me }: { me: Me }) {
           customer: analysis.customers[i],
           options: { language: opts.language, currency: opts.currency, day_rate: Number(opts.day_rate), pm_pct: Number(opts.pm_pct), hints: opts.hints, source_file: file },
         });
+        // Original-Excel in der Kundenakte unter „Anfragen“ ablegen
+        if (rawFile && (result as any).company_id) {
+          const fd = new FormData();
+          fd.append('company_id', (result as any).company_id);
+          fd.append('folder', '/Anfragen/');
+          fd.append('files', rawFile, rawFile.name);
+          fd.append('paths', rawFile.name);
+          fetch('/api/documents/upload', { method: 'POST', body: fd }).catch(() => {});
+        }
         setProgress((p) => ({ ...p, [i]: { state: 'ok', result } }));
       } catch (e: any) {
         setProgress((p) => ({ ...p, [i]: { state: 'err', error: e.message } }));
@@ -132,7 +143,7 @@ export function ExcelImport({ me }: { me: Me }) {
     <>
       <PageHead
         title="✦ Angebote aus Excel"
-        sub="Die KI liest Kundenanfragen oder Anforderungslisten und erstellt je Kunde ein Angebot und ein technisches Angebot."
+        sub="Die KI liest Kundenanfragen oder Anforderungslisten und erstellt je Kunde ein Angebot und eine technische Spezifikation."
         actions={sheets && <button className="btn" onClick={reset}>Neue Datei</button>}
       />
       {!me.ai && <div className="legal" style={{ marginBottom: 16 }}>Die KI ist noch nicht aktiv: In Cloudflare fehlt das Secret <b>ANTHROPIC_API_KEY</b>.</div>}
@@ -210,9 +221,9 @@ export function ExcelImport({ me }: { me: Me }) {
                     </div>
                     {pr?.state === 'ok' && pr.result && (
                       <div className="rfq-done">
-                        <span><b>{pr.result.number}</b> · {fmtMoney(pr.result.total, pr.result.currency)} · {pr.result.days} PT</span>
+                        <span>{pr.result.customer_no && <span className="cno" style={{ marginRight: 8 }}>{pr.result.customer_no}</span>}<b>{pr.result.number}</b> · {fmtMoney(pr.result.total, pr.result.currency)} · {pr.result.days} PT · {pr.result.language === 'en' ? 'Englisch' : 'Deutsch'}</span>
                         <span style={{ display: 'flex', gap: 8 }}>
-                          <a className="btn sm" href={`/api/quotes/${pr.result.quote_id}/tech/pdf`} target="_blank" rel="noreferrer">Technisches Angebot</a>
+                          <a className="btn sm" href={`/api/quotes/${pr.result.quote_id}/tech/pdf`} target="_blank" rel="noreferrer">Technische Spezifikation</a>
                           <a className="btn sm" href={`/api/quotes/${pr.result.quote_id}/pdf`} target="_blank" rel="noreferrer">Angebot</a>
                           <button className="btn sm primary" onClick={() => go(`/quotes/${pr.result!.quote_id}`)}>Öffnen</button>
                         </span>
@@ -255,7 +266,7 @@ export function ExcelImport({ me }: { me: Me }) {
               <Field label="PM & QS Aufschlag %"><input type="number" value={opts.pm_pct} onChange={setO('pm_pct')} /></Field>
               <Field label="Sprache">
                 <select value={opts.language} onChange={setO('language')}>
-                  <option value="auto">wie der Kunde</option><option value="de">Deutsch</option><option value="en">Englisch</option>
+                  <option value="auto">automatisch (aus der Beschreibung)</option><option value="de">Deutsch</option><option value="en">Englisch</option>
                 </select>
               </Field>
               <Field label="Hinweise für die KI (optional)" span={2}>
@@ -273,19 +284,19 @@ export function ExcelImport({ me }: { me: Me }) {
           )}
           {phase === 'generating' && (
             <div className="card" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <Spinner /><div style={{ fontSize: 13 }}>Erstelle technisches und kaufmännisches Angebot je Kunde (ca. 1–2 Minuten pro Kunde). Fenster bitte offen lassen.</div>
+              <Spinner /><div style={{ fontSize: 13 }}>Erstelle technische Spezifikation und Angebot je Kunde (ca. 1–2 Minuten pro Kunde). Fenster bitte offen lassen.</div>
             </div>
           )}
           {phase === 'done' && (
             <div className="card" style={{ fontSize: 13.5 }}>
-              <b>Fertig.</b> Die Angebote liegen als Entwurf unter „Angebote“. Kunden, Kontakte und Deals wurden angelegt. Bitte prüfen und dann per Gmail senden – das technische Angebot wird automatisch mit angehängt.
+              <b>Fertig.</b> Die Angebote liegen als Entwurf unter „Angebote“. Kunden (mit Kundennummer), Kontakte und Deals sind angelegt, PDFs und die Excel liegen in der Kundenakte. Bitte prüfen und dann per Gmail senden – die technische Spezifikation wird automatisch mit angehängt.
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}><button className="btn sm" onClick={() => go('/quotes')}>Zu den Angeboten</button><button className="btn sm" onClick={reset}>Weitere Datei</button></div>
             </div>
           )}
           <div className="card" style={{ fontSize: 13 }}>
             <h4 style={{ marginBottom: 6 }}>Was entsteht je Kunde</h4>
             <ul style={{ margin: 0, paddingLeft: 18, color: '#374151' }}>
-              <li><b>Technisches Angebot (PDF):</b> Ausgangslage, Lösungsansatz, Technologie, jede Anforderung mit Fit/Gap, Lösung und Aufwand in PT, Projektplan, Annahmen, Abgrenzungen, offene Fragen</li>
+              <li><b>Technische Spezifikation (PDF):</b> Ausgangslage, Lösungsansatz, Technologie, jede Anforderung mit Fit/Gap, Lösung und Aufwand in PT, Projektplan, Annahmen, Abgrenzungen, offene Fragen</li>
               <li><b>Angebot:</b> Arbeitspakete × Tagessatz plus PM & QS – im Editor anpassbar</li>
               <li>Firma, Kontakt und Deal im CRM</li>
             </ul>

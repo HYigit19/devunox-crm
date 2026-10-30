@@ -7,6 +7,7 @@ import { campaignRoutes } from './campaigns';
 import { rfqRoutes, techRoutes } from './rfq';
 import { taskRoutes, projectRoutes, docRoutes } from './work';
 import { reviewHook } from './review';
+import { timeRoutes, insightRoutes } from './insights';
 import { runAgent } from './ai';
 import { getAccessToken, upcomingEvents, GoogleError } from './google';
 
@@ -59,7 +60,7 @@ api.use('*', requireAuth);
 
 api.get('/me', async (c) => {
   const u = await c.env.DB.prepare('SELECT scopes, refresh_token_enc IS NOT NULL AS google FROM users WHERE id = ?').bind(c.get('user').id).first<any>();
-  return c.json({ ...c.get('user'), google: !!u?.google, scopes: u?.scopes || '', ai: !!c.env.ANTHROPIC_API_KEY, model: c.env.AI_MODEL || 'claude-sonnet-5-5' });
+  return c.json({ ...c.get('user'), google: !!u?.google, scopes: u?.scopes || '', ai: !!c.env.ANTHROPIC_API_KEY, review: !!(c.env.REVIEW_URL && c.env.REVIEW_WEBHOOK_SECRET), review_url: c.env.REVIEW_URL || '', model: c.env.AI_MODEL || 'claude-sonnet-5-5' });
 });
 
 api.get('/settings', async (c) => c.json(await getSettings(c.env.DB)));
@@ -151,6 +152,8 @@ api.route('/rfq', rfqRoutes);
 api.route('/tasks', taskRoutes);
 api.route('/projects', projectRoutes);
 api.route('/documents', docRoutes);
+api.route('/time', timeRoutes);
+api.route('/', insightRoutes);
 api.route('/campaigns', campaignRoutes);
 
 app.route('/api', api);

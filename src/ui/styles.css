@@ -384,3 +384,18 @@ tr:hover .row-actions { opacity: 1; }
   .items td.item-sum { text-align: left; font-weight: 700; align-self: end; padding-bottom: 8px !important; }
   .items td.item-act { align-self: end; text-align: right; }
 }
+
+/* Kundennummer, Suche, Timer */
+.cno { display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; background: var(--ink); color: #fff; border-radius: 7px; padding: 2px 8px; vertical-align: middle; }
+.cno.lg { font-size: 14px; padding: 3px 10px; background: var(--orange); }
+.searchbox { position: relative; display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 11px; padding: 0 10px; margin: 0 2px 10px; color: var(--muted); }
+.searchbox input { border: 0; background: transparent; padding: 9px 0; box-shadow: none !important; font-size: 13.5px; }
+.search-res { position: absolute; top: calc(100% + 6px); left: 0; width: 360px; max-width: 80vw; background: #fff; border-radius: 14px; box-shadow: var(--shadow-l); z-index: 60; padding: 6px; max-height: 420px; overflow-y: auto; }
+.search-res button { all: unset; box-sizing: border-box; display: flex; gap: 9px; align-items: center; width: 100%; padding: 8px 10px; border-radius: 9px; cursor: pointer; font-size: 13.5px; color: var(--ink); }
+.search-res button span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-res button:hover, .search-res button.on { background: var(--bg); }
+.timer-badge { display: flex; gap: 10px; align-items: center; background: var(--orange-soft); border: 1px solid #ffd2bd; border-radius: 12px; padding: 9px 10px; margin: 0 2px 10px; font-variant-numeric: tabular-nums; }
+.pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 0 rgba(255, 90, 31, 0.6); animation: pulse 1.6s infinite; flex: 0 0 9px; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 31, 0.5); } 70% { box-shadow: 0 0 0 8px rgba(255, 90, 31, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 90, 31, 0); } }
+.searchbox input, .searchbox input:focus { border: 0 !important; outline: none; box-shadow: none !important; }
+.searchbox:focus-within { box-shadow: 0 0 0 2px rgba(255, 90, 31, 0.35); background: #fff; }

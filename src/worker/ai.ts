@@ -60,8 +60,8 @@ export async function draftQuote(env: Env, input: { request: string; products: a
   const text = await askClaude(env, {
     system: `Du erstellst Angebotsentwürfe für ${s.company_name}. Profil: ${s.ai_company_profile}
 Antworte ausschließlich mit JSON im Format:
-{"title": string, "intro": string, "outro": string, "items": [{"name": string, "description": string, "qty": number, "unit": string, "unit_price": number, "product_id": string|null}]}
-Regeln: Nutze wenn passend Artikel aus dem Katalog (product_id + Preis übernehmen). Preise in ${input.currency}. Sprache: ${input.language === 'en' ? 'Englisch' : 'Deutsch'}.
+{"language": "de"|"en", "title": string, "intro": string, "outro": string, "items": [{"name": string, "description": string, "qty": number, "unit": string, "unit_price": number, "product_id": string|null}]}
+Regeln: Bestimme "language" aus der Sprache der Projektbeschreibung (Englisch geschrieben → "en", Deutsch → "de") und schreibe ALLE Texte in dieser Sprache. Nutze wenn passend Artikel aus dem Katalog (product_id + Preis übernehmen). Preise in ${input.currency}.
 Schreibe "SAP QM" immer ohne Bindestrich. Beschreibungen konkret und knapp (Leistungsumfang, Ergebnisse). Keine erfundenen Rabatte.`,
     prompt: `Kunde: ${input.customer || 'unbekannt'}
 Anfrage / Notizen: ${input.request}

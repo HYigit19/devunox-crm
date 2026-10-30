@@ -5,6 +5,13 @@ Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claud
 
 **Funktionen**
 
+- **Kundennummer & Kundenakte:** Jeder Kunde bekommt automatisch eine fortlaufende Kundennummer (K-10001 …). Sie steht auf Angeboten, technischen Spezifikationen, Statusberichten, in Dateinamen und in devunox Review.
+  - Die Kundenakte zeigt auf einer Zeitleiste alles zu einem Kunden: Angebote (erstellt, versendet, angenommen), Dokumente, Aufgaben, Feedback, erfasste Zeiten und Kommunikation. Dazu Kennzahlen wie Umsatz, Stunden und offene Punkte.
+  - Standardordner je Kunde: Anfragen, Angebote, Technische Spezifikationen, Verträge, Korrespondenz, Projekte, Berichte.
+  - Angebote und Spezifikationen werden automatisch abgelegt: bei Erstellung aus Excel, beim Versand und bei Annahme. Die Original-Excel landet unter „Anfragen“.
+- **Zeiterfassung:** Timer in jeder Aufgabe (läuft auch beim Seitenwechsel weiter) oder nachträglich erfasst, abrechenbar oder intern. Auswertung je Kunde, Projekt und Monat, CSV-Export.
+- **Projekt-Statusbericht (PDF):** DE oder EN, mit Fortschritt, erledigten und offenen Aufgaben, Kunden-Feedback und Zeiten. Auf Wunsch wird er unter „Berichte“ abgelegt.
+- **Globale Suche (Strg+K):** findet Kunden (auch über die Kundennummer), Kontakte, Angebote, Projekte, Aufgaben und Dokumente.
 - **CRM:** Firmen, Kontakte, Deal-Pipeline (Kanban), Aktivitäten
 - **Projekte je Kunde:** Aufgaben-Board, Dokumente, Verknüpfung mit Angebot und devunox Review. Projekte lassen sich mit einem Klick aus einem Angebot anlegen; dabei werden die Anforderungen des technischen Angebots als Aufgaben übernommen.
 - **Aufgaben (To-dos):** Board und Liste mit vier Spalten: Offen, In Arbeit, Beim Kunden, Erledigt.
@@ -20,9 +27,9 @@ Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claud
   - Steuer-Varianten: Inland, Reverse Charge, Nicht-EU, ohne MwSt.
   - PDF-Erzeugung mit fortlaufender Nummer (AN-2026-0001)
   - Erstentwurf per KI
-- **Excel → Angebot (KI):** Excel-Datei hochladen (eine Anforderungsliste eines Kunden oder eine Liste mehrerer Kunden).
+- **Excel → Angebot (KI):** Excel-Datei hochladen (eine Anforderungsliste eines Kunden oder eine Liste mehrerer Kunden). Die Sprache (DE/EN) erkennt die KI aus der Projektbeschreibung. Das gilt auch für den KI-Entwurf im Angebots-Editor.
   - Die KI erkennt Kunden, Kontakte und Anforderungen und erstellt je Kunde zwei Dokumente:
-    - ein **technisches Angebot** (PDF): Ausgangslage, Lösungsansatz, Technologie, Fit/Gap-Bewertung und Aufwand in Personentagen je Anforderung, Arbeitspakete, Projektplan, Annahmen, Abgrenzungen, offene Fragen
+    - eine **technische Spezifikation** (PDF): Ausgangslage, Lösungsansatz, Technologie, Fit/Gap-Bewertung und Aufwand in Personentagen je Anforderung, Arbeitspakete, Projektplan, Annahmen, Abgrenzungen, offene Fragen
     - ein **einfaches Angebot**: Arbeitspakete × Tagessatz plus Aufschlag für Projektmanagement und Qualitätssicherung
   - Firma, Kontakt und Deal werden automatisch angelegt.
   - Die Bewertungen sind editierbar. Mit „Preise neu berechnen“ übernimmt das Angebot die geänderten Aufwände.
@@ -41,8 +48,11 @@ Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claud
 ## devunox Review ↔ CRM
 
 So funktioniert die Verbindung:
+- **Aus dem CRM anlegen:** Im Projekt auf „In devunox Review anlegen“ klicken. Das legt in Review den Kunden mit seiner Kundennummer an, dazu den Feedback-Zugang für den Ansprechpartner und das Projekt.
+  - Der Einladungslink geht mit einem Klick per Gmail an den Kunden.
+  - Weitere Projekte desselben Kunden nutzen den bestehenden Zugang.
 - Gibt ein Kunde in **devunox Review** (project.review.devunox.ai) Feedback, entsteht im CRM automatisch eine **Aufgabe** im passenden Projekt.
-  - Das Projekt wird über das Review-Kürzel zugeordnet und bei Bedarf samt Firma angelegt.
+  - Zuordnung: zuerst das Review-Kürzel, dann die Kundennummer. Fehlen Projekt oder Firma, werden sie angelegt.
   - Priorität und Kategorie werden übernommen.
 - Antwortet der Kunde in Review, landet die Antwort im Verlauf der Aufgabe und die Aufgabe wird als „neu“ markiert.
 - Öffnet der Kunde einen Punkt wieder, springt die Aufgabe zurück auf „Offen“, mit seiner Begründung.
@@ -67,7 +77,7 @@ Solange kein Secret gesetzt ist, passiert nichts.
 
 ### 1. Cloudflare-Datenbank – bereits erledigt
 
-Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt, alle Migrationen (0001–0003) sind eingespielt.
+Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt, alle Migrationen (0001–0004) sind eingespielt.
 Den R2-Speicher `devunox-crm-dokumente` (EU) legt das erste Deployment automatisch an. Falls das Build-Log einen Fehler dazu zeigt: Im Dashboard unter **R2 → Create bucket** den Namen `devunox-crm-dokumente` eintragen, *Location → Specify jurisdiction → EU* wählen und dann neu deployen.
 Die Adresse `crm.devunox.ai` richtet das Deployment ebenfalls ein (`routes` in `wrangler.jsonc`), weil devunox.ai im selben Cloudflare-Konto liegt. Ihre ID steht schon in `wrangler.jsonc`.
 
@@ -146,7 +156,7 @@ Später neue Tabellen oder Spalten als `migrations/0002_….sql` anlegen und mit
 ## Aufbau
 
 ```
-src/worker/   API (Hono) – auth, crm, quotes, rfq (Excel→Angebot), work (Aufgaben, Projekte, Ablage), review (Webhook), campaigns, ai, google, pdf
+src/worker/   API (Hono) – auth, crm, quotes, rfq (Excel→Angebot), work (Kunden, Aufgaben, Projekte, Ablage), insights (Zeiten, Kundenakte, Suche, Statusbericht), review, campaigns, ai, google, pdf
 src/ui/       Oberfläche (React + Vite)
 migrations/   Datenbankschema (D1)
 ```

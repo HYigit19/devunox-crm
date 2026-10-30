@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { AppEnv, Env, addDays, getSettings, nextNumber, round2, suggestTaxMode, todayIso, uid } from './util';
 import { askClaude, parseJson } from './ai';
 import { TechProposal, TechRequirement, packageEffort, renderTechPdf } from './techpdf';
-import { computeTotals } from './quotes';
+import { computeTotals, buildPdf } from './quotes';
+import { createCompany, storeDocument } from './work';
 
 export const rfqRoutes = new Hono<AppEnv>();
 export const techRoutes = new Hono<AppEnv>();
@@ -35,7 +36,7 @@ Für jeden Kunden extrahierst du:
 - contact: salutation, first_name, last_name, email, phone, position – nur falls vorhanden.
 - project_title: kurzer Projekttitel.
 - description: Ausgangslage in 2–4 Sätzen, nur aus der Datei abgeleitet.
-- language: "de" oder "en" – die Sprache, in der der Kunde schreibt.
+- language: "de" oder "en" – entscheidend ist die Sprache der Projektbeschreibung und der Anforderungstexte dieses Kunden (nicht Land oder Firmensitz). Gemischt: die überwiegende Sprache der Beschreibungen.
 - requirements: ALLE Anforderungen als einzelne, prüfbare Punkte: ref (vorhandene ID übernehmen, sonst A-01, A-02 …), title (kurz), description (vollständig, sinngemäß), priority ("muss"/"soll"/"kann" oder vorhandene Angabe, sonst null), category.
   Bei Form B zerlegst du den Freitext jedes Kunden in einzelne Anforderungen.
 Erfinde keine Anforderungen und lasse keine weg. Überschriften- oder Leerzeilen ignorieren.
@@ -143,10 +144,11 @@ async function upsertCustomer(env: Env, cu: RfqCustomer, userId: string) {
   const name = cu.company.name.trim();
   let company = await env.DB.prepare('SELECT * FROM companies WHERE LOWER(name) = LOWER(?)').bind(name).first<any>();
   if (!company) {
-    const id = uid();
-    await env.DB.prepare('INSERT INTO companies (id, name, website, industry, city, country, owner_id, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, name, cu.company.website || null, cu.company.industry || null, cu.company.city || null, (cu.company.country || '').toUpperCase().slice(0, 2) || null, userId, 'Excel-Anfrage')
-      .run();
+    const { id } = await createCompany(
+      env,
+      { name, website: cu.company.website || null, industry: cu.company.industry || null, city: cu.company.city || null, country: (cu.company.country || '').toUpperCase().slice(0, 2) || null, tags: 'Excel-Anfrage' },
+      userId,
+    );
     company = await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(id).first<any>();
   }
   let contact: any = null;
@@ -193,7 +195,7 @@ rfqRoutes.post('/generate', async (c) => {
   const dealId = uid();
   const number = await nextNumber(c.env.DB, 'quote', s.quote_prefix || 'AN', Number(issue.slice(0, 4)));
   const intro = `${greeting(cu, lang)}\n\n${proposal.offer_intro || (lang === 'en' ? 'Thank you for your enquiry. Please find our proposal below.' : 'vielen Dank für Ihre Anfrage. Gerne unterbreiten wir Ihnen folgendes Angebot:')}\n\n${
-    lang === 'en' ? 'Details of the solution, the assessment of each requirement and the project plan are set out in the enclosed technical proposal.' : 'Details zur Lösung, die Bewertung jeder Anforderung und den Projektplan finden Sie im beiliegenden technischen Angebot.'
+    lang === 'en' ? 'Details of the solution, the assessment of each requirement and the project plan are set out in the enclosed technical specification.' : 'Details zur Lösung, die Bewertung jeder Anforderung und den Projektplan finden Sie in der beiliegenden technischen Spezifikation.'
   }`;
   const stmts: D1PreparedStatement[] = [
     c.env.DB.prepare(`INSERT INTO deals (id, title, company_id, contact_id, stage, value, currency, probability, source, owner_id) VALUES (?, ?, ?, ?, 'proposal', ?, ?, 50, 'Excel-Anfrage', ?)`).bind(
@@ -213,12 +215,21 @@ rfqRoutes.post('/generate', async (c) => {
     ),
     c.env.DB.prepare('INSERT INTO tech_proposals (id, quote_id, source_file, data) VALUES (?, ?, ?, ?)').bind(uid(), quoteId, options.source_file || null, JSON.stringify({ ...proposal, pm_pct: pmPct, day_rate: dayRate })),
     c.env.DB.prepare(`INSERT INTO activities (id, type, subject, body, company_id, contact_id, deal_id, quote_id, done, created_by) VALUES (?, 'system', ?, ?, ?, ?, ?, ?, 1, ?)`).bind(
-      uid(), `Angebot ${number} + technisches Angebot aus Excel erstellt`, `${cu.requirements.length} Anforderungen${options.source_file ? ` aus „${options.source_file}“` : ''}`, company.id, contactId, dealId, quoteId, user.id,
+      uid(), `Angebot ${number} + technische Spezifikation aus Excel erstellt`, `${cu.requirements.length} Anforderungen${options.source_file ? ` aus „${options.source_file}“` : ''}`, company.id, contactId, dealId, quoteId, user.id,
     ),
   ];
   await c.env.DB.batch(stmts);
+  // Angebot + technische Spezifikation sofort in der Kundenakte ablegen
+  try {
+    const q = await buildPdf(c.env, quoteId);
+    await storeDocument(c.env, { company_id: company.id, folder: '/Angebote/', name: q.filename, data: q.bytes, mime: 'application/pdf', source: 'quote', userId: user.id });
+    const t = await buildTechPdf(c.env, quoteId);
+    if (t) await storeDocument(c.env, { company_id: company.id, folder: '/Technische Spezifikationen/', name: t.filename, data: t.bytes, mime: 'application/pdf', source: 'tech', userId: user.id });
+  } catch (e) {
+    console.error('Ablage fehlgeschlagen', e);
+  }
   const eff = packageEffort(proposal, pmPct);
-  return c.json({ quote_id: quoteId, number, company: company.name, total: totals.total, net: totals.net, currency, days: eff.total, requirements: proposal.requirements.length });
+  return c.json({ quote_id: quoteId, number, company: company.name, company_id: company.id, customer_no: company.customer_no, language: lang, total: totals.total, net: totals.net, currency, days: eff.total, requirements: proposal.requirements.length });
 });
 
 // ---------------------------------------------------------------- 3) Technisches Angebot ansehen/bearbeiten
@@ -231,12 +242,11 @@ export async function loadTech(env: Env, quoteId: string) {
 export async function buildTechPdf(env: Env, quoteId: string) {
   const tp = await loadTech(env, quoteId);
   if (!tp) return null;
-  const q = await env.DB.prepare('SELECT q.*, co.name AS company_name FROM quotes q LEFT JOIN companies co ON co.id = q.company_id WHERE q.id = ?').bind(quoteId).first<any>();
+  const q = await env.DB.prepare('SELECT q.*, co.name AS company_name, co.customer_no FROM quotes q LEFT JOIN companies co ON co.id = q.company_id WHERE q.id = ?').bind(quoteId).first<any>();
   const s = await getSettings(env.DB);
   const lang: 'de' | 'en' = q.language === 'en' ? 'en' : 'de';
-  const bytes = await renderTechPdf({ p: tp.data, lang, quoteNumber: q.number, date: q.issue_date, customer: q.company_name || '', seller: s, pmPct: tp.data.pm_pct ?? Number(s.pm_pct) });
-  const safe = (q.company_name || 'Kunde').replace(/[^\w\-äöüÄÖÜß ]+/g, '').trim().replace(/\s+/g, '_');
-  return { bytes, filename: `${lang === 'en' ? 'Technical_Proposal' : 'Technisches_Angebot'}_${q.number}_${safe}.pdf` };
+  const bytes = await renderTechPdf({ p: tp.data, lang, quoteNumber: q.number, date: q.issue_date, customer: q.company_name || '', customerNo: q.customer_no || '', seller: s, pmPct: tp.data.pm_pct ?? Number(s.pm_pct) });
+  return { bytes, filename: `${q.customer_no ? q.customer_no + '_' : ''}${lang === 'en' ? 'Technical_Specification' : 'Technische_Spezifikation'}_${q.number}.pdf` };
 }
 
 techRoutes.get('/:id/tech', async (c) => {

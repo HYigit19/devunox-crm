@@ -16,8 +16,9 @@ import { ExcelImport } from './pages/ExcelImport';
 import { TasksPage } from './pages/Tasks';
 import { ProjectsList, ProjectDetail } from './pages/Projects';
 import { DocumentsPage } from './pages/Documents';
+import { TimePage, TimerBadge } from './pages/Time';
 
-export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; ai: boolean; model: string; scopes: string };
+export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; ai: boolean; review: boolean; review_url: string; model: string; scopes: string };
 
 const NAV: { group: string; items: { path: string; label: string; icon: string; badge?: 'tasks' }[] }[] = [
   { group: '', items: [{ path: '/', label: 'Übersicht', icon: I.home }] },
@@ -38,6 +39,7 @@ const NAV: { group: string; items: { path: string; label: string; icon: string; 
       { path: '/projects', label: 'Projekte', icon: I.project },
       { path: '/tasks', label: 'Aufgaben', icon: I.tasks, badge: 'tasks' },
       { path: '/documents', label: 'Dokumente', icon: I.docs },
+      { path: '/time', label: 'Zeiten', icon: I.time },
     ],
   },
   {
@@ -84,6 +86,64 @@ function Login() {
   );
 }
 
+function SearchBox() {
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState(0);
+  const ref = React.useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        ref.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+  useEffect(() => {
+    if (q.trim().length < 2) return setRes([]);
+    const tm = setTimeout(() => api.get<any[]>(`/search?q=${encodeURIComponent(q.trim())}`).then((r) => { setRes(r); setSel(0); }).catch(() => {}), 180);
+    return () => clearTimeout(tm);
+  }, [q]);
+  const pick = (r: any) => {
+    setOpen(false);
+    setQ('');
+    if (r.href.startsWith('#')) window.location.hash = r.href.slice(1);
+    else window.open(r.href, '_blank');
+  };
+  return (
+    <div className="searchbox">
+      <Icon d={I.search} size={16} />
+      <input
+        ref={ref}
+        placeholder="Suchen … (Strg+K)"
+        value={q}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setSel((x) => Math.min(x + 1, res.length - 1)); }
+          if (e.key === 'ArrowUp') { e.preventDefault(); setSel((x) => Math.max(x - 1, 0)); }
+          if (e.key === 'Enter' && res[sel]) pick(res[sel]);
+          if (e.key === 'Escape') { setOpen(false); (e.target as HTMLInputElement).blur(); }
+        }}
+      />
+      {open && q.trim().length >= 2 && (
+        <div className="search-res">
+          {res.length === 0 ? <div className="muted" style={{ padding: 12, fontSize: 13 }}>Nichts gefunden.</div> : res.map((r, i) => (
+            <button key={r.type + r.id} className={i === sel ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(r)}>
+              <span className="badge grey" style={{ fontSize: 10.5, padding: '1px 7px' }}>{r.type}</span>
+              <span style={{ minWidth: 0 }}><b>{r.title}</b>{r.sub && <span className="muted"> · {r.sub}</span>}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const route = useRoute();
   const [me, setMe] = useState<Me | null | undefined>(undefined);
@@ -110,7 +170,7 @@ function App() {
     );
   if (me === null) return <Login />;
 
-  const seg = route.split('/').filter(Boolean);
+  const seg = route.split('?')[0].split('/').filter(Boolean);
   let page: React.ReactNode;
   switch (seg[0]) {
     case undefined:
@@ -143,6 +203,9 @@ function App() {
     case 'documents':
       page = <DocumentsPage />;
       break;
+    case 'time':
+      page = <TimePage />;
+      break;
     case 'products':
       page = <Products />;
       break;
@@ -161,6 +224,8 @@ function App() {
           <img src="/brand/logo.png" alt="devunox AI" />
           <span>CRM · Angebote · Projekte</span>
         </a>
+        <SearchBox />
+        <TimerBadge />
         {NAV.map((g) => (
           <div key={g.group}>
             {g.group && <div className="nav-label">{g.group}</div>}
