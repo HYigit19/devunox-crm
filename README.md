@@ -1,5 +1,7 @@
 # devunox AI · CRM
 
+Entwickelt von **devunoxAI** – KI-Automatisierung, Websites, Web-Apps und Dashboards: [www.devunox.ai](https://www.devunox.ai)
+
 Angebote, CRM, Projekte, Aufgaben, Dokumentenablage und KI-Vertriebsagent – im devunox-AI-Design.
 Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claude. Adresse: **https://crm.devunox.ai**
 
