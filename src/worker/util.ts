@@ -165,6 +165,9 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   drive_folder_id: '',
   app_url: '',
   drive_quotes_folder_id: '',
+  sign_name: 'Hüseyin Yigit',
+  sign_role: 'CEO · devunox AI',
+  sign_place: '',
 };
 
 export async function getSettings(db: D1Database): Promise<Record<string, string>> {

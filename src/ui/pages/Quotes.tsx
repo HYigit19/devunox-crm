@@ -2,16 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { Badge, Empty, Field, Modal, PageHead, QUOTE_STATUS, SelectCompany, SelectContact, Spinner, confirmDel, fmtDate, fmtMoney, fmtMoney2, go, useAction, useLoad, useToast } from '../components';
 import type { Me } from '../main';
+import { useSignAssets, SIGN_LABEL } from './PdfSign';
 
 export function QuotesList() {
   const [status, setStatus] = useState('');
   const [list] = useLoad<any[]>(`/quotes${status ? `?status=${status}` : ''}`);
-  const { busy, run } = useAction();
-  const create = () => run('n', async () => { const q = await api.post('/quotes', {}); go(`/quotes/${q.id}`); });
+  const [neu, setNeu] = useState(false);
+  const create = () => setNeu(true);
   const sum = (s: string) => (list || []).filter((q) => q.status === s).reduce((a, q) => a + q.total, 0);
   return (
     <>
-      <PageHead title="Angebote" sub={list ? `${list.length} Angebote` : ''} actions={<><button className="btn" onClick={() => go('/import')}>✦ Aus Excel erstellen</button><button className="btn accent" disabled={!!busy} onClick={create}>+ Angebot</button></>} />
+      <PageHead title="Angebote" sub={list ? `${list.length} Angebote` : ''} actions={<><button className="btn" onClick={() => go('/import')}>✦ Aus Excel erstellen</button><button className="btn accent" onClick={create}>+ Angebot erstellen</button></>} />
+      {neu && <NewQuoteDialog onClose={() => setNeu(false)} />}
       {!status && list && list.length > 0 && (
         <div className="grid k4" style={{ marginBottom: 16 }}>
           {(['draft', 'sent', 'accepted', 'rejected'] as const).map((s) => (
@@ -59,6 +61,97 @@ export function QuotesList() {
   );
 }
 
+
+// ---------------- Sprache DE/EN
+
+const UNIT_EN: Record<string, string> = { tag: 'Day', tage: 'Days', pt: 'PD', personentag: 'Person-day', personentage: 'Person-days', stunde: 'Hour', stunden: 'Hours', 'std.': 'hrs', std: 'hrs', monat: 'Month', monate: 'Months', woche: 'Week', wochen: 'Weeks', pauschal: 'Lump sum', pauschale: 'Lump sum', 'stück': 'Pc.', stk: 'Pc.', 'stk.': 'Pc.', lizenz: 'License', jahr: 'Year', jahre: 'Years' };
+const UNIT_DE: Record<string, string> = { day: 'Tag', days: 'Tage', pd: 'PT', 'person-day': 'Personentag', 'person-days': 'Personentage', hour: 'Stunde', hours: 'Stunden', hrs: 'Std.', month: 'Monat', months: 'Monate', week: 'Woche', weeks: 'Wochen', 'lump sum': 'Pauschal', 'pc.': 'Stk.', license: 'Lizenz', year: 'Jahr', years: 'Jahre' };
+export const translateUnit = (u: string, to: 'de' | 'en') => {
+  const k = (u || '').trim().toLowerCase();
+  return (to === 'en' ? UNIT_EN[k] : UNIT_DE[k]) || u;
+};
+
+export function LangSwitch({ value, onChange, disabled, big }: { value: string; onChange: (l: 'de' | 'en') => void; disabled?: boolean; big?: boolean }) {
+  return (
+    <div className={`seg lang-switch ${big ? 'big' : ''}`} role="group" aria-label="Sprache des Angebots">
+      <button type="button" className={value === 'de' ? 'active' : ''} disabled={disabled} onClick={() => value !== 'de' && onChange('de')}>🇩🇪 DE</button>
+      <button type="button" className={value === 'en' ? 'active' : ''} disabled={disabled} onClick={() => value !== 'en' && onChange('en')}>🇬🇧 EN</button>
+    </div>
+  );
+}
+
+/** Dialog „Angebot erstellen“: Kunde, Sprache, Titel – dann direkt in den Editor */
+export function NewQuoteDialog({ onClose, companyId, contactId }: { onClose: () => void; companyId?: string; contactId?: string }) {
+  const [v, setV] = useState({ company_id: companyId || '', contact_id: contactId || '', language: 'de' as 'de' | 'en', title: '', currency: 'EUR' });
+  const [companies] = useLoad<any[]>('/companies');
+  const [touchedLang, setTouchedLang] = useState(false);
+  const { busy, run } = useAction();
+  useEffect(() => {
+    // Sprache aus dem Land des Kunden vorschlagen (DACH → Deutsch), solange nicht selbst gewählt
+    if (touchedLang || !v.company_id) return;
+    const c = companies?.find((x) => x.id === v.company_id);
+    if (c?.country) setV((o) => ({ ...o, language: ['DE', 'AT', 'CH', 'LI'].includes(String(c.country).toUpperCase()) ? 'de' : 'en' }));
+  }, [v.company_id, companies]);
+  const create = () => run('n', async () => {
+    const q = await api.post('/quotes', { ...v, company_id: v.company_id || null, contact_id: v.contact_id || null, title: v.title || null });
+    onClose();
+    go(`/quotes/${q.id}`);
+  });
+  return (
+    <Modal title="Angebot erstellen" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={!!busy} onClick={create}>{busy ? 'Erstelle…' : 'Angebot erstellen'}</button></>}>
+      <div className="form">
+        <Field label="Sprache des Angebots" span={2}>
+          <div className="lang-cards">
+            <button type="button" className={v.language === 'de' ? 'on' : ''} onClick={() => { setTouchedLang(true); setV({ ...v, language: 'de' }); }}><b>🇩🇪 Deutsch</b><span>„Angebot“, deutsche Texte</span></button>
+            <button type="button" className={v.language === 'en' ? 'on' : ''} onClick={() => { setTouchedLang(true); setV({ ...v, language: 'en' }); }}><b>🇬🇧 English</b><span>“Proposal”, English texts</span></button>
+          </div>
+        </Field>
+        <Field label="Kunde" span={2}><SelectCompany value={v.company_id} onChange={(id) => setV({ ...v, company_id: id, contact_id: '' })} /></Field>
+        <Field label="Ansprechpartner" span={2}><SelectContact value={v.contact_id} companyId={v.company_id} onChange={(id) => setV({ ...v, contact_id: id })} /></Field>
+        <Field label="Titel / Betreff"><input value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} placeholder={v.language === 'en' ? 'Website relaunch' : 'Website-Relaunch'} /></Field>
+        <Field label="Währung"><select value={v.currency} onChange={(e) => setV({ ...v, currency: e.target.value })}><option>EUR</option><option>USD</option><option>PLN</option><option>CHF</option></select></Field>
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Logo, Firmendaten, Unterschrift und Stempel kommen automatisch ins PDF. Die Sprache lässt sich im Angebot jederzeit mit einem Klick umstellen.</p>
+    </Modal>
+  );
+}
+
+/** Live-Vorschau des Briefkopfs wie im PDF */
+function Letterhead({ q, settings, assets }: { q: any; settings: any; assets: any }) {
+  const en = q.language === 'en';
+  const s = settings || {};
+  const seller = [s.company_street, [s.company_zip, s.company_city].filter(Boolean).join(' '), s.company_phone ? `Tel. ${s.company_phone}` : '', s.company_email, s.company_website].filter(Boolean);
+  const missing = !s.company_street || !s.company_city || !s.company_vat_id;
+  return (
+    <div className="letterhead">
+      <div className="lh-bar" />
+      <div className="lh-top">
+        <img src="/brand/logo.png" alt="devunox AI" />
+        <div className="lh-seller"><b>{s.company_legal || s.company_name}</b>{seller.map((l: string) => <div key={l}>{l}</div>)}</div>
+      </div>
+      <div className="lh-mid">
+        <div><b>{q.company_name || (en ? 'Customer' : 'Kunde')}</b>{q.contact_name && <div>{q.contact_name}</div>}</div>
+        <div className="lh-meta">
+          {q.customer_no && <div>{en ? 'Customer no.' : 'Kundennr.'} <b>{q.customer_no}</b></div>}
+          <div>{en ? 'Proposal no.' : 'Angebotsnr.'} <b>{q.number}</b></div>
+          <div>{en ? 'Date' : 'Datum'} <b>{en ? q.issue_date : fmtDate(q.issue_date)}</b></div>
+        </div>
+      </div>
+      <div className="lh-title">{en ? 'Proposal' : 'Angebot'} {q.number}</div>
+      {q.signed !== 0 && assets && (
+        <>
+          <div className="lh-sign">
+            {assets.signature && <img src={assets.signature.url} alt="" />}
+            {assets.stamp && <img src={assets.stamp.url} alt="" />}
+          </div>
+          <div className="lh-cap">{en ? SIGN_LABEL.en : SIGN_LABEL.de}</div>
+        </>
+      )}
+      {missing && <div className="lh-missing" style={{ marginTop: 10 }}>Tipp: Adresse und USt-IdNr. fehlen noch in den Firmendaten.</div>}
+    </div>
+  );
+}
+
 type Item = { name: string; description: string; qty: number | string; unit: string; unit_price: number | string; discount_pct: number | string; tax_rate: number | string; product_id?: string | null };
 
 function totals(items: Item[], discountPct: number, taxMode: string) {
@@ -88,6 +181,7 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
   const [settings] = useLoad<any>('/settings');
   const [aiText, setAiText] = useState('');
   const [send, setSend] = useState(false);
+  const [assets] = useSignAssets();
   const { busy, run } = useAction();
   const toast = useToast();
 
@@ -132,6 +226,18 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
       setDirty(true);
     }, 'KI-Entwurf eingefügt – bitte prüfen und speichern');
 
+  /** Sprache mit einem Klick umstellen: Standardtexte und Einheiten werden mit übersetzt */
+  const switchLang = (lang: 'de' | 'en') => {
+    const from = q.language === 'en' ? 'en' : 'de';
+    const isDefault = (k: 'intro' | 'outro') => !q[k] || q[k].trim() === (settings?.[`quote_${k}_${from}`] || '').trim();
+    let replace = isDefault('intro') && isDefault('outro');
+    if (!replace) replace = window.confirm(lang === 'en' ? 'Einleitung und Schlusstext durch die englischen Standardtexte ersetzen?\n\n„Abbrechen“ behält deine eigenen Texte.' : 'Einleitung und Schlusstext durch die deutschen Standardtexte ersetzen?\n\n„Abbrechen“ behält deine eigenen Texte.');
+    setQ((o: any) => ({ ...o, language: lang, ...(replace ? { intro: settings?.[`quote_intro_${lang}`] ?? o.intro, outro: settings?.[`quote_outro_${lang}`] ?? o.outro } : {}) }));
+    setItems((l) => l.map((it) => ({ ...it, unit: translateUnit(it.unit, lang) })));
+    setDirty(true);
+    toast(lang === 'en' ? 'Angebot auf Englisch umgestellt – PDF heißt jetzt „Proposal“' : 'Angebot auf Deutsch umgestellt');
+  };
+
   const setStatus = (status: string) => run('st', async () => { if (dirty) await save(true); setQ(await api.post(`/quotes/${id}/status`, { status })); }, 'Status aktualisiert');
   const toDrive = () => run('dr', async () => { if (dirty) await save(true); const r = await api.post(`/quotes/${id}/drive`); window.open(r.link, '_blank'); }, 'In Google Drive gespeichert');
   const pdf = () => run('pdf', async () => { if (dirty) await save(true); window.open(`/api/quotes/${id}/pdf`, '_blank'); });
@@ -145,8 +251,9 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
         sub={q.company_name ? <>{q.customer_no && <span className="cno" style={{ marginRight: 8 }}>{q.customer_no}</span>}<a href={`#/companies/${q.company_id}`}>{q.company_name}</a></> : 'Kein Kunde gewählt'}
         actions={
           <>
+            <LangSwitch value={q.language} onChange={switchLang} disabled={locked} big />
             {dirty && <button className="btn primary" disabled={!!busy} onClick={() => run('s', () => save())}>Speichern</button>}
-            <button className="btn" disabled={!!busy} onClick={pdf}>PDF</button>
+            <button className="btn" disabled={!!busy} onClick={pdf}>PDF ansehen</button>
             <button className="btn" disabled={!!busy || !me.google} onClick={toDrive}>{busy === 'dr' ? 'Speichere…' : 'In Drive'}</button>
             <button className="btn primary" disabled={!!busy || !me.google || !items.length} onClick={async () => { if (dirty) await run('s', () => save(true)); setSend(true); }}>✉ Per Gmail senden</button>
           </>
@@ -233,6 +340,18 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
         </div>
 
         <div className="stack">
+          <div className="card">
+            <div className="card-head"><h2>Briefkopf & Unterschrift</h2><a className="btn sm ghost" href="#/settings">Firmendaten →</a></div>
+            <Letterhead q={q} settings={settings} assets={assets} />
+            <label className="check" style={{ marginTop: 12 }}>
+              <input type="checkbox" checked={q.signed !== 0} disabled={locked} onChange={(e) => upd('signed', e.target.checked ? 1 : 0)} />
+              Digital unterschreiben und stempeln ({q.language === 'en' ? 'EN' : 'DE'})
+            </label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              <button className="btn sm" disabled={!!busy} onClick={pdf}>PDF-Vorschau</button>
+              <a className="btn sm ghost" href="#/pdf">Unterschrift & Stempel ändern</a>
+            </div>
+          </div>
           <TechCard quoteId={id} currency={q.currency} onRecalc={load} />
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>Kunde & Konditionen</h2>
@@ -241,15 +360,7 @@ export function QuoteEditor({ id, me }: { id: string; me: Me }) {
               <Field label="Ansprechpartner" span={2}><SelectContact value={q.contact_id} companyId={q.company_id} onChange={(v) => upd('contact_id', v || null)} /></Field>
               <Field label="Datum"><input type="date" value={q.issue_date || ''} onChange={(e) => upd('issue_date', e.target.value)} disabled={locked} /></Field>
               <Field label="Gültig bis"><input type="date" value={q.valid_until || ''} onChange={(e) => upd('valid_until', e.target.value)} disabled={locked} /></Field>
-              <Field label="Sprache">
-                <select value={q.language} disabled={locked} onChange={(e) => {
-                  const lang = e.target.value;
-                  setQ((o: any) => ({ ...o, language: lang, intro: settings?.[`quote_intro_${lang}`] ?? o.intro, outro: settings?.[`quote_outro_${lang}`] ?? o.outro }));
-                  setDirty(true);
-                }}>
-                  <option value="de">Deutsch</option><option value="en">Englisch</option>
-                </select>
-              </Field>
+              <Field label="Sprache"><LangSwitch value={q.language} onChange={switchLang} disabled={locked} /></Field>
               <Field label="Währung"><select value={q.currency} onChange={(e) => upd('currency', e.target.value)} disabled={locked}><option>EUR</option><option>USD</option><option>PLN</option><option>CHF</option></select></Field>
               <Field label="Steuer" span={2}>
                 <select value={q.tax_mode} onChange={(e) => upd('tax_mode', e.target.value)} disabled={locked}>

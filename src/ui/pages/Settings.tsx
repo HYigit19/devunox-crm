@@ -28,7 +28,7 @@ export function Settings({ me }: { me: Me }) {
       <div className="grid side">
         <div className="stack">
           <div className="card">
-            <h2 style={{ marginBottom: 14 }}>Firmendaten (Angebots-PDF)</h2>
+            <div className="card-head"><h2>Firmendaten (Briefkopf, Angebots-PDF, Stempel)</h2><a className="btn sm ghost" href="#/pdf">Unterschrift & Stempel →</a></div>
             <div className="form c3">
               {f('company_name', 'Firmenname (Logo-Text)')}
               {f('company_legal', 'Rechtlicher Name', { span: 2, ph: 'Devunox Solutions sp. z o.o.' })}
@@ -127,7 +127,7 @@ export function Settings({ me }: { me: Me }) {
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>Agent-Protokoll</h2>
             {!log ? <Spinner /> : log.length === 0 ? <div className="muted">Noch keine Einträge.</div> : log.slice(0, 25).map((l) => (
-              <div key={l.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid #f0f2f6' }}>
+              <div key={l.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
                 <span className={`badge ${l.level === 'error' ? 'red' : l.level === 'warn' ? 'amber' : 'grey'}`}>{l.level}</span> {l.message}
               </div>
             ))}

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { Empty, Field, Modal, PageHead, Spinner, fmtDate, useAction, useLoad, useToast } from '../components';
+import { PdfEditor } from './PdfSign';
 
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1).replace('.', ',')} MB`);
 
@@ -37,8 +38,9 @@ async function collectDropped(dt: DataTransfer): Promise<Entry[]> {
   return out;
 }
 
-export function DocBrowser({ companyId, projectId, compact }: { companyId?: string; projectId?: string; compact?: boolean }) {
-  const scope = new URLSearchParams(Object.entries({ company_id: companyId || '', project_id: projectId || '' }).filter(([, v]) => v)).toString();
+export function DocBrowser({ companyId, projectId, compact, general }: { companyId?: string; projectId?: string; compact?: boolean; general?: boolean }) {
+  const scope = new URLSearchParams(Object.entries({ company_id: companyId || '', project_id: projectId || '', general: general ? '1' : '' }).filter(([, v]) => v)).toString();
+  const [editPdf, setEditPdf] = useState<any>(null);
   const [data, reload] = useLoad<{ files: any[]; folders: string[] }>(`/documents?${scope}`);
   const [folder, setFolder] = useState('/');
   const [q, setQ] = useState('');
@@ -241,6 +243,7 @@ export function DocBrowser({ companyId, projectId, compact }: { companyId?: stri
                       <td className="hide-m">{fmtDate(f.updated_at || f.created_at)}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <div className="row-actions">
+                          {k === 'pdf' && <button className="icon-btn" title="PDF bearbeiten / unterschreiben" style={{ color: 'var(--orange)' }} onClick={() => setEditPdf(f)}>✍</button>}
                           <a className="icon-btn" title="Herunterladen" href={`/api/documents/${f.id}/file?download=1`}>⇩</a>
                           <button className="icon-btn" title="Umbenennen" onClick={() => renameFile(f)}>✎</button>
                           <button className="icon-btn" title="Tags" onClick={() => tagFile(f)}>#</button>
@@ -257,6 +260,25 @@ export function DocBrowser({ companyId, projectId, compact }: { companyId?: stri
         )}
       </div>
       {!compact && <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>Tipp: Dateien auf einen Ordner ziehen, um sie zu verschieben. Gespeichert in Cloudflare R2 (EU).</p>}
+      {editPdf && (
+        <PdfEditor
+          title={editPdf.name}
+          load={() => fetch(`/api/documents/${editPdf.id}/file`).then((r) => { if (!r.ok) throw new Error('PDF konnte nicht geladen werden'); return r.arrayBuffer(); })}
+          onClose={() => setEditPdf(null)}
+          onSave={async (bytes, name) => {
+            const fd = new FormData();
+            if (companyId) fd.append('company_id', companyId);
+            if (projectId) fd.append('project_id', projectId);
+            fd.append('folder', editPdf.folder || folder);
+            fd.append('files', new File([bytes as BlobPart], name, { type: 'application/pdf' }), name);
+            fd.append('paths', name);
+            const res = await fetch('/api/documents/upload', { method: 'POST', body: fd });
+            if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as any).error || 'Speichern fehlgeschlagen');
+            toast(`„${name}“ in der Ablage gespeichert`);
+            reload();
+          }}
+        />
+      )}
       {moveDlg && (
         <MoveDialog folders={data.folders} current={folder} onClose={() => setMoveDlg(null)} onMove={(target) => { bulk('move', moveDlg, target); setMoveDlg(null); }} />
       )}
@@ -286,31 +308,48 @@ export function DocumentsPage() {
   const [companies] = useLoad<any[]>('/companies');
   const [cid, setCid] = useState<string>('');
   const [q, setQ] = useState('');
+  const browser = useRef<HTMLDivElement>(null);
   const list = (companies || []).filter((c) => (c.name + ' ' + (c.customer_no || '')).toLowerCase().includes(q.toLowerCase()));
   const current = companies?.find((c) => c.id === cid);
+  const pick = (id: string) => {
+    setCid(id);
+    // auf dem Handy direkt zur Ablage springen
+    if (window.innerWidth < 860) setTimeout(() => browser.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+  const itemStyle = (on: boolean): React.CSSProperties => ({ width: '100%', justifyContent: 'flex-start', background: on ? 'var(--grad-1)' : undefined, color: on ? '#fff' : undefined, boxShadow: on ? 'var(--glow-1)' : undefined, marginBottom: 3 });
   return (
     <>
-      <PageHead title="Dokumente" sub="Ablage je Kunde – Ordner, Drag & Drop, Tags. Versendete Angebote landen automatisch im Ordner „Angebote“." />
-      <div className="grid" style={{ gridTemplateColumns: '280px minmax(0,1fr)', alignItems: 'start' }}>
+      <PageHead title="Dokumente" sub="Ablage je Kunde – Ordner, Drag & Drop, Tags. Versendete Angebote landen automatisch im Ordner „Angebote“. PDFs lassen sich direkt bearbeiten und unterschreiben." />
+      <div className="grid docs-layout">
         <div className="card" style={{ padding: 12 }}>
+          <button onClick={() => pick('__general')} className="btn ghost" style={itemStyle(cid === '__general')}>
+            <span className="ficon doc" style={{ width: 26, height: 26, flex: '0 0 26px', fontSize: 12 }}>★</span>
+            <span style={{ textAlign: 'left' }}>Meine Ablage<span style={{ display: 'block', fontSize: 11, opacity: 0.6, fontWeight: 500 }}>ohne Kundenbezug</span></span>
+          </button>
+          <div className="nav-label" style={{ padding: '10px 6px 6px' }}>Kunden</div>
           <input placeholder="Kunde oder Kundennr. …" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 8 }} />
-          <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-            {!companies ? <Spinner /> : list.length === 0 ? <div className="muted" style={{ padding: 8, fontSize: 13 }}>Keine Kunden.</div> : list.map((c) => (
-              <button key={c.id} onClick={() => setCid(c.id)} className="btn ghost" style={{ width: '100%', justifyContent: 'flex-start', background: c.id === cid ? 'var(--grad-1)' : undefined, color: c.id === cid ? '#fff' : undefined, boxShadow: c.id === cid ? 'var(--glow-1)' : undefined, marginBottom: 3 }}>
+          <div className="cust-list">
+            {!companies ? <Spinner /> : list.length === 0 ? <div className="muted" style={{ padding: 8, fontSize: 13 }}>{q ? 'Kein Kunde gefunden.' : 'Noch keine Kunden – lege unter „Firmen“ einen an.'}</div> : list.map((c) => (
+              <button key={c.id} onClick={() => pick(c.id)} className="btn ghost" style={itemStyle(c.id === cid)}>
                 <span className="ficon folder" style={{ width: 26, height: 26, flex: '0 0 26px', fontSize: 12 }}>▰</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{c.name}<span style={{ display: 'block', fontSize: 11, opacity: 0.6, fontWeight: 500 }}>{c.customer_no}</span></span>
               </button>
             ))}
           </div>
         </div>
-        <div className="card">
-          {current ? (
+        <div className="card" ref={browser} style={{ scrollMarginTop: 70 }}>
+          {cid === '__general' ? (
+            <>
+              <div className="card-head"><h2>Meine Ablage</h2><span className="muted">Verträge, Vorlagen, eigene Unterlagen</span></div>
+              <DocBrowser key="general" general />
+            </>
+          ) : current ? (
             <>
               <div className="card-head"><h2>{current.name} <span className="cno">{current.customer_no}</span></h2><a href={`#/companies/${current.id}`} className="btn sm ghost">Zur Firma →</a></div>
               <DocBrowser key={current.id} companyId={current.id} />
             </>
           ) : (
-            <Empty title="Kunde wählen" text="Links einen Kunden auswählen, um seine Ablage zu öffnen." />
+            <Empty title="Ablage wählen" text="Wähle „Meine Ablage“ oder einen Kunden, um die Dateien zu öffnen." />
           )}
         </div>
       </div>

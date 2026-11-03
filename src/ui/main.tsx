@@ -17,6 +17,7 @@ import { TasksPage } from './pages/Tasks';
 import { ProjectsList, ProjectDetail } from './pages/Projects';
 import { DocumentsPage } from './pages/Documents';
 import { TimePage, TimerBadge } from './pages/Time';
+import { PdfPage } from './pages/PdfSign';
 
 export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; google_email: string; has_password: boolean; must_change_password: boolean; ai: boolean; review: boolean; review_url: string; model: string; scopes: string };
 
@@ -39,6 +40,7 @@ const NAV: { group: string; items: { path: string; label: string; icon: string; 
       { path: '/projects', label: 'Projekte', icon: I.project },
       { path: '/tasks', label: 'Aufgaben', icon: I.tasks, badge: 'tasks' },
       { path: '/documents', label: 'Dokumente', icon: I.docs },
+      { path: '/pdf', label: 'PDF bearbeiten', icon: I.sign },
       { path: '/time', label: 'Zeiten', icon: I.time },
     ],
   },
@@ -242,6 +244,18 @@ function App() {
     return () => window.removeEventListener('unauthenticated', off);
   }, []);
   useEffect(() => setMenu(false), [route]);
+  // Mobil: Seite hinter dem geöffneten Menü sperren, damit nur das Menü scrollt
+  useEffect(() => {
+    if (!menu) return;
+    const y = window.scrollY;
+    document.body.classList.add('menu-open');
+    document.body.style.top = `-${y}px`;
+    return () => {
+      document.body.classList.remove('menu-open');
+      document.body.style.top = '';
+      window.scrollTo(0, y);
+    };
+  }, [menu]);
   useEffect(() => {
     if (!me) return;
     api.get<any[]>('/tasks?open=1&limit=500').then((l) => setCounts({ unread: l.filter((t) => t.unread).length })).catch(() => {});
@@ -289,6 +303,9 @@ function App() {
     case 'documents':
       page = <DocumentsPage />;
       break;
+    case 'pdf':
+      page = <PdfPage />;
+      break;
     case 'time':
       page = <TimePage />;
       break;
@@ -306,6 +323,7 @@ function App() {
   return (
     <div className="layout">
       <aside className={`sidebar ${menu ? 'open' : ''}`}>
+        <button className="sidebar-close" onClick={() => setMenu(false)} aria-label="Menü schließen">✕</button>
         <a className="brand" href="#/">
           <img src={logoFor(theme)} alt="devunox AI" />
           <span>CRM · Angebote · Projekte</span>

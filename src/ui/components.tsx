@@ -254,17 +254,20 @@ export function SelectContact({ value, onChange, companyId }: { value: string; o
 }
 
 // ---------------- Hell/Dunkel
+// Standard ist das helle Design. Neuer Schlüssel, damit alte „dunkel“-Einstellungen nicht weiter greifen.
+const THEME_KEY = 'dvx_theme_v2';
 export function getTheme(): 'dark' | 'light' {
   try {
-    return (localStorage.getItem('dvx_theme') as 'dark' | 'light') || 'dark';
+    return (localStorage.getItem(THEME_KEY) as 'dark' | 'light') || 'light';
   } catch {
-    return 'dark';
+    return 'light';
   }
 }
 export function applyTheme(t: 'dark' | 'light') {
   document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'dark' ? '#0d0c14' : '#ffffff');
   try {
-    localStorage.setItem('dvx_theme', t);
+    localStorage.setItem(THEME_KEY, t);
   } catch {
     /* egal */
   }

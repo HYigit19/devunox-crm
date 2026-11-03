@@ -9,6 +9,7 @@ import { taskRoutes, projectRoutes, docRoutes } from './work';
 import { reviewHook } from './review';
 import { timeRoutes, insightRoutes } from './insights';
 import { runAgent } from './ai';
+import { signRoutes } from './sign';
 import { getAccessToken, upcomingEvents, GoogleError } from './google';
 
 const app = new Hono<AppEnv>();
@@ -155,6 +156,7 @@ api.route('/documents', docRoutes);
 api.route('/time', timeRoutes);
 api.route('/', insightRoutes);
 api.route('/campaigns', campaignRoutes);
+api.route('/sign', signRoutes);
 
 app.route('/api', api);
 

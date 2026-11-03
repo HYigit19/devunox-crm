@@ -1,4 +1,4 @@
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, degrees, rgb } from 'pdf-lib';
 import { LOGO_PNG_B64, LOGO_RATIO } from './logo';
 
 export type DocItem = { pos: number; name: string; description?: string | null; qty: number; unit?: string | null; unit_price: number; discount_pct?: number | null; tax_rate?: number | null };
@@ -19,6 +19,7 @@ export type QuoteDoc = {
   totals: { subtotal: number; discount: number; net: number; taxes: { rate: number; amount: number }[]; tax_total: number; total: number };
   buyer: { company?: string | null; contact?: string | null; street?: string | null; zip?: string | null; city?: string | null; country?: string | null; vat_id?: string | null };
   seller: Record<string, string>;
+  sign?: { signature?: Uint8Array | null; stamp?: Uint8Array | null; name: string; role: string; place?: string; date: string } | null;
 };
 
 const L = {
@@ -29,6 +30,8 @@ const L = {
     rc: 'Reverse Charge – Steuerschuldnerschaft des Leistungsempfängers (Art. 196 MwStSystRL). Die Umsatzsteuer wird vom Leistungsempfänger geschuldet.',
     noneu: 'Nicht im Inland steuerbare Leistung (Leistungsort beim Empfänger). Die Umsatzsteuer ist ggf. vom Leistungsempfänger nach dem Recht seines Landes abzuführen.',
     allnet: 'Alle Preise netto zzgl. gesetzlicher Umsatzsteuer.',
+    signed: 'Digital unterschrieben und gestempelt',
+    on: 'am',
   },
   en: {
     quote: 'Proposal', number: 'Proposal no.', customer: 'Customer no.', date: 'Date', valid: 'Valid until', vat: 'VAT ID', pos: 'Item', desc: 'Description', qty: 'Qty',
@@ -37,6 +40,8 @@ const L = {
     rc: 'Reverse charge – VAT to be accounted for by the recipient (Art. 196 Council Directive 2006/112/EC).',
     noneu: 'Service not subject to VAT in the country of the supplier (place of supply is the recipient’s country). Any VAT or sales tax is to be accounted for by the recipient.',
     allnet: 'All prices are net, plus statutory VAT.',
+    signed: 'Digitally signed and stamped',
+    on: 'on',
   },
 };
 
@@ -155,9 +160,17 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
     page = pdf.addPage([W, H]);
     pages.push(page);
     drawBrandHeader(page, logo, W, H, M, 150);
-    const right = [s.company_website, s.company_email, s.company_phone].filter(Boolean);
-    right.forEach((r, i) => text(r, W - M, H - 42 - i * 11, { size: 8, color: GREY, align: 'right' }));
-    y = H - 94;
+    // Firmendaten rechts im Briefkopf
+    const right: [string, boolean][] = [
+      [s.company_legal || s.company_name, true],
+      [s.company_street, false],
+      [[s.company_zip, s.company_city].filter(Boolean).join(' '), false],
+      [s.company_phone ? `Tel. ${s.company_phone}` : '', false],
+      [s.company_email, false],
+      [s.company_website, false],
+    ].filter(([v]) => !!v) as [string, boolean][];
+    right.forEach(([r, strong], i) => text(r, W - M, H - 36 - i * 10.5, { size: strong ? 8.5 : 8, f: strong ? bold : font, color: strong ? DARK : GREY, align: 'right' }));
+    y = Math.min(H - 94, H - 36 - right.length * 10.5 - 16);
   };
   const ensure = (h: number) => {
     if (y - h < FOOT + 10) newPage();
@@ -234,7 +247,9 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
     }
     const lineTotal = it.qty * it.unit_price * (1 - (it.discount_pct || 0) / 100);
     text(String(it.pos), col.pos, y, { size: 9.5 });
-    text(`${num(it.qty, d.language)} ${it.unit || ''}`.trim(), col.qty, y, { size: 9.5, align: 'right' });
+    const EN_PL: Record<string, string> = { day: 'Days', hour: 'Hours', month: 'Months', week: 'Weeks', year: 'Years', 'person-day': 'Person-days', license: 'Licenses' };
+    const unit = d.language === 'en' && it.qty !== 1 && EN_PL[(it.unit || '').toLowerCase()] ? EN_PL[(it.unit || '').toLowerCase()] : it.unit || '';
+    text(`${num(it.qty, d.language)} ${unit}`.trim(), col.qty, y, { size: 9.5, align: 'right' });
     text(money(it.unit_price, d.currency, d.language), col.price, y, { size: 9.5, align: 'right' });
     text(money(lineTotal, d.currency, d.language), col.total, y, { size: 9.5, align: 'right' });
     if (it.discount_pct) text(`-${num(it.discount_pct, d.language)} %`, col.price, y - 11, { size: 8, color: GREY, align: 'right' });
@@ -295,6 +310,39 @@ export async function renderQuotePdf(d: QuoteDoc): Promise<Uint8Array> {
       text(l, M, y, { size: 10 });
       y -= 14;
     }
+  }
+
+  // Digitale Unterschrift & Firmenstempel
+  if (d.sign && (d.sign.signature || d.sign.stamp)) {
+    const sig = d.sign.signature ? await pdf.embedPng(d.sign.signature).catch(() => null) : null;
+    const stp = d.sign.stamp ? await pdf.embedPng(d.sign.stamp).catch(() => null) : null;
+    const blockH = 132;
+    y -= 10;
+    ensure(blockH);
+    const top = y;
+    // Unterschrift links über der Linie
+    const lineY = top - 66;
+    if (sig) {
+      const w = 160, h = Math.min(60, (w * sig.height) / sig.width);
+      page.drawImage(sig, { x: M, y: lineY + 2, width: (h * sig.width) / sig.height, height: h });
+    }
+    page.drawLine({ start: { x: M, y: lineY }, end: { x: M + 200, y: lineY }, thickness: 0.6, color: GREY });
+    text(d.sign.name, M, lineY - 12, { size: 9.5, f: bold });
+    if (d.sign.role) text(d.sign.role, M, lineY - 24, { size: 8.5, color: GREY });
+    // Stempel rechts daneben, leicht gedreht
+    if (stp) {
+      const w = 170, h = (w * stp.height) / stp.width;
+      page.drawImage(stp, { x: M + 228, y: lineY - 34, width: w, height: h, rotate: degrees(-3), opacity: 0.95 });
+    }
+    // Vermerk
+    const when = [d.sign.place, fmtDate(d.sign.date, d.language)].filter(Boolean).join(', ');
+    const label = [t.signed, when].filter(Boolean).join(' · ');
+    const ly = lineY - 50;
+    const lw = bold.widthOfTextAtSize(clean(label), 8.5) + 26;
+    page.drawRectangle({ x: M, y: ly - 6, width: lw, height: 18, color: rgb(1, 0.94, 0.91), borderColor: ORANGE, borderWidth: 0.6 });
+    page.drawCircle({ x: M + 9, y: ly + 3, size: 3, color: ORANGE });
+    text(label, M + 18, ly, { size: 8.5, f: bold, color: RUST });
+    y = ly - 20;
   }
 
   // Fußzeile auf allen Seiten

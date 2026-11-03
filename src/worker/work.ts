@@ -278,9 +278,11 @@ async function ensureFolders(env: Env, company: string | null, project: string |
 
 docRoutes.get('/', async (c) => {
   const { company, project } = scope(c);
+  const general = c.req.query('general') === '1';
   const q = c.req.query('q');
   const where: string[] = [];
   const args: unknown[] = [];
+  if (general) where.push('d.company_id IS NULL AND d.project_id IS NULL');
   if (company) {
     where.push('d.company_id = ?');
     args.push(company);
@@ -302,6 +304,7 @@ docRoutes.get('/', async (c) => {
     .all();
   const fw: string[] = [];
   const fa: unknown[] = [];
+  if (general) fw.push('company_id IS NULL AND project_id IS NULL');
   if (company) {
     fw.push('company_id = ?');
     fa.push(company);

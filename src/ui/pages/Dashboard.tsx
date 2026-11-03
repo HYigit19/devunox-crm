@@ -4,6 +4,7 @@ import { Spinner, STAGES, fmtDate, fmtDateTime, fmtMoney, go, useAction, useLoad
 import { ICONS, Icon } from '../icons';
 import type { Me } from '../main';
 import { NewTask, TaskDrawer, TASK_STATUS } from './Tasks';
+import { NewQuoteDialog } from './Quotes';
 
 const STAGE_COLORS: Record<string, string> = { lead: '#3d7bff', qualified: '#8b6cff', proposal: '#ff5a1f', negotiation: '#ff3d7f', won: '#2bd9a0', lost: '#5b5970' };
 
@@ -79,6 +80,7 @@ export function Dashboard({ me }: { me: Me }) {
   const [events] = useLoad<any>(me.google ? '/calendar/upcoming' : null);
   const [open, setOpen] = useState<string | null>(null);
   const [newTask, setNewTask] = useState(false);
+  const [newQuote, setNewQuote] = useState(false);
   const { run } = useAction();
   if (!d) return <Spinner />;
   const rate = d.quoteRate.won + d.quoteRate.lost ? Math.round((d.quoteRate.won / (d.quoteRate.won + d.quoteRate.lost)) * 100) : null;
@@ -103,8 +105,8 @@ export function Dashboard({ me }: { me: Me }) {
       </div>
 
       <div className="quick">
-        <button onClick={() => run('q', async () => { const q = await api.post('/quotes', {}); go(`/quotes/${q.id}`); })}>
-          <span className="ico tint-orange"><Icon d={ICONS.quote} /></span><div><b>Angebot erstellen</b><span>leer oder mit KI</span></div>
+        <button onClick={() => setNewQuote(true)}>
+          <span className="ico tint-orange"><Icon d={ICONS.quote} /></span><div><b>Angebot erstellen</b><span>DE / EN, leer oder mit KI</span></div>
         </button>
         <button onClick={() => go('/import')}>
           <span className="ico tint-rust"><Icon d={ICONS.excel} /></span><div><b>Excel → Angebot</b><span>technisch + kaufmännisch</span></div>
@@ -112,8 +114,8 @@ export function Dashboard({ me }: { me: Me }) {
         <button onClick={() => setNewTask(true)}>
           <span className="ico tint-green"><Icon d={ICONS.tasks} /></span><div><b>Aufgabe anlegen</b><span>mit Projekt & Termin</span></div>
         </button>
-        <button onClick={() => go('/documents')}>
-          <span className="ico tint-violet"><Icon d={ICONS.docs} /></span><div><b>Dokument ablegen</b><span>Ablage je Kunde</span></div>
+        <button onClick={() => go('/pdf')}>
+          <span className="ico tint-violet"><Icon d={ICONS.sign} /></span><div><b>PDF unterschreiben</b><span>Unterschrift & Stempel</span></div>
         </button>
       </div>
 
@@ -211,6 +213,7 @@ export function Dashboard({ me }: { me: Me }) {
       </div>
       {open && <TaskDrawer id={open} onClose={() => setOpen(null)} onChanged={reload} />}
       {newTask && <NewTask onClose={() => setNewTask(false)} onSaved={reload} />}
+      {newQuote && <NewQuoteDialog onClose={() => setNewQuote(false)} />}
     </>
   );
 }
