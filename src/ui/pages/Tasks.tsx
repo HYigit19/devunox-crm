@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { Empty, Field, Modal, PageHead, Spinner, confirmDel, fmtDate, fmtDateTime, go, useAction, useLoad, useToast } from '../components';
+import { FeedbackPanel, FB_STATUS } from './Feedback';
 import { TimeEntries } from './Time';
 
 export const TASK_STATUS: { id: string; label: string; color: string }[] = [
@@ -10,7 +11,7 @@ export const TASK_STATUS: { id: string; label: string; color: string }[] = [
   { id: 'done', label: 'Erledigt', color: '#2bd9a0' },
 ];
 export const PRIO_LABEL: Record<string, string> = { high: 'Hoch', medium: 'Mittel', low: 'Niedrig' };
-const SOURCE: Record<string, [string, string]> = { review: ['Review', 'violet'], agent: ['KI-Agent', 'orange'], system: ['Angebot', 'grey'] };
+const SOURCE: Record<string, [string, string]> = { review: ['Kunden-Feedback', 'violet'], agent: ['KI-Agent', 'orange'], system: ['Angebot', 'grey'], ops: ['Betrieb', 'blue'] };
 
 function dueInfo(due?: string | null) {
   if (!due) return null;
@@ -52,7 +53,7 @@ export function TaskBoard({ filter = '', projectId, companyId, showProject = tru
       const t = list.find((x) => x.id === id);
       if (!t || t.status === status) return;
       const r = await api.put(`/tasks/${id}`, { status });
-      if (t.source === 'review' && r.review_sync && !String(r.review_sync).startsWith('Fehler')) toast(`An devunox Review gemeldet: ${r.review_sync}`);
+      if (t.source === 'review' && r.review_sync && !String(r.review_sync).startsWith('Fehler')) toast(`An das Kundenportal gemeldet: ${r.review_sync}`);
       if (String(r.review_sync || '').startsWith('Fehler')) toast(`Review nicht aktualisiert – ${r.review_sync}`, 'err');
       reload();
     });
@@ -120,6 +121,16 @@ export function NewTask({ status = 'todo', projectId, companyId, contactId, onCl
   );
 }
 
+/** Kunden-Feedback (Screenshot, Verlauf, Antwort) direkt in der Aufgabe */
+function TaskFeedback({ taskId, onChanged }: { taskId: string; onChanged: () => void }) {
+  const [it, setIt] = useState<any>(undefined);
+  const load = () => api.get(`/feedback/by-task/${taskId}`).then(setIt).catch(() => setIt(null));
+  useEffect(() => { load(); }, [taskId]);
+  if (it === undefined) return <Spinner />;
+  if (!it) return <div className="muted" style={{ fontSize: 13 }}>Feedback aus dem Kundenportal nicht gefunden.</div>;
+  return <FeedbackPanel compact item={it} onChanged={(n) => { n ? setIt(n) : load(); onChanged(); }} />;
+}
+
 export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
   const [t, setT] = useState<any>(null);
   const [projects] = useLoad<any[]>('/projects');
@@ -140,7 +151,7 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
     const r = await api.put(`/tasks/${id}`, { status, note: noteText || undefined });
     if (t.source === 'review') {
       if (String(r.review_sync || '').startsWith('Fehler')) toast(`Review nicht aktualisiert – ${r.review_sync}`, 'err');
-      else if (r.review_sync && !['unverändert', 'übersprungen'].includes(r.review_sync)) toast('Status an devunox Review gemeldet' + (noteText ? ' (inkl. Notiz für den Kunden)' : ''));
+      else if (r.review_sync && !['unverändert', 'übersprungen'].includes(r.review_sync)) toast('Status an das Kundenportal gemeldet' + (noteText ? ' (inkl. Notiz für den Kunden)' : ''));
     }
     setNoteText('');
     await load();
@@ -160,7 +171,7 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 250px', gap: 22 }}>
         <div className="stack">
           <input style={{ fontSize: 18, fontWeight: 700, border: 0, padding: '4px 0', boxShadow: 'none' }} value={t.title} onChange={(e) => upd('title', e.target.value)} />
-          <textarea rows={5} placeholder="Beschreibung" value={t.description || ''} onChange={(e) => upd('description', e.target.value)} />
+          {t.source === 'review' ? <TaskFeedback taskId={id} onChanged={() => { load(); onChanged(); }} /> : <textarea rows={5} placeholder="Beschreibung" value={t.description || ''} onChange={(e) => upd('description', e.target.value)} />}
           <div className="card" style={{ background: 'var(--chip)', boxShadow: 'none', padding: 14 }}>
             <h4 style={{ marginBottom: 8 }}>Zeit</h4>
             <TimeEntries taskId={id} projectId={t.project_id || undefined} companyId={t.company_id || undefined} title={t.title} compact />
@@ -197,7 +208,7 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
                 </button>
               ))}
             </div>
-            {t.source === 'review' && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>„Beim Kunden“ und „Erledigt“ setzen den Punkt in devunox Review auf „Bitte prüfen“. Der Kunde nimmt dort ab.</div>}
+            {t.source === 'review' && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>„Beim Kunden“ und „Erledigt“ setzen den Punkt im Kundenportal auf „Bitte prüfen“. Der Kunde nimmt dort ab.</div>}
           </div>
           <Field label="Priorität">
             <select value={t.priority} onChange={(e) => upd('priority', e.target.value)}>
@@ -215,10 +226,10 @@ export function TaskDrawer({ id, onClose, onChanged }: { id: string; onClose: ()
             {t.company_name && <><dt>Firma</dt><dd><a href={`#/companies/${t.company_id}`} onClick={onClose}>{t.company_name}</a></dd></>}
             {t.contact_name && <><dt>Kontakt</dt><dd>{t.contact_name}</dd></>}
             <dt>Quelle</dt><dd>{SOURCE[t.source]?.[0] || 'Manuell'}</dd>
-            {t.external_status && <><dt>Review</dt><dd>{t.external_status}</dd></>}
+            {t.external_status && <><dt>Portal</dt><dd>{FB_STATUS[t.external_status]?.[0] || t.external_status}</dd></>}
             <dt>Angelegt</dt><dd>{fmtDate(t.created_at)}</dd>
           </dl>
-          {t.external_url && <a className="btn sm" href={t.external_url} target="_blank" rel="noreferrer">In devunox Review öffnen ↗</a>}
+          {t.external_url && <a className="btn sm" href={t.external_url} target="_blank" rel="noreferrer">Im Kundenportal öffnen ↗</a>}
           {t.project_id && <button className="btn sm ghost" onClick={() => { onClose(); go(`/projects/${t.project_id}`); }}>Zum Projekt →</button>}
         </div>
       </div>
@@ -241,7 +252,7 @@ export function TasksPage() {
     <>
       <PageHead
         title="Aufgaben"
-        sub="Alle To-dos – eigene, aus Angeboten, vom KI-Agenten und Kunden-Feedback aus devunox Review."
+        sub="Alle To-dos – eigene, aus Angeboten, vom KI-Agenten und Kunden-Kunden-Feedback."
         actions={<>
           <div className="seg"><button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')}>Board</button><button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>Liste</button></div>
           <button className="btn primary" onClick={() => setCreate(true)}>+ Aufgabe</button>
@@ -254,7 +265,7 @@ export function TasksPage() {
           {(projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select value={source} onChange={(e) => setSource(e.target.value)}>
-          <option value="">Alle Quellen</option><option value="review">devunox Review</option><option value="manual">Manuell</option><option value="agent">KI-Agent</option><option value="system">Aus Angebot</option>
+          <option value="">Alle Quellen</option><option value="review">Kunden-Feedback</option><option value="ops">Betrieb</option><option value="manual">Manuell</option><option value="agent">KI-Agent</option><option value="system">Aus Angebot</option>
         </select>
         <select value={prio} onChange={(e) => setPrio(e.target.value)}>
           <option value="">Alle Prioritäten</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option>
@@ -273,7 +284,7 @@ export function TaskList({ filter, reloadKey = 0 }: { filter: string; reloadKey?
   const { run } = useAction();
   const sorted = useMemo(() => list || [], [list]);
   if (!list) return <Spinner />;
-  if (!list.length) return <div className="card"><Empty title="Keine Aufgaben" text="Hier erscheinen eigene Aufgaben und Feedback aus devunox Review." /></div>;
+  if (!list.length) return <div className="card"><Empty title="Keine Aufgaben" text="Hier erscheinen eigene Aufgaben und Kunden-Feedback." /></div>;
   return (
     <div className="card flush">
       <div className="table-wrap">

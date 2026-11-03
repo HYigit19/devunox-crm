@@ -6,7 +6,7 @@ import { createCompany } from './work';
 
 export const crmRoutes = new Hono<AppEnv>();
 
-const COMPANY_FIELDS = ['name', 'website', 'industry', 'size', 'street', 'zip', 'city', 'country', 'vat_id', 'phone', 'email', 'tags', 'notes', 'research'];
+const COMPANY_FIELDS = ['owner_id', 'name', 'website', 'industry', 'size', 'street', 'zip', 'city', 'country', 'vat_id', 'phone', 'email', 'tags', 'notes', 'research'];
 const CONTACT_FIELDS = ['company_id', 'salutation', 'first_name', 'last_name', 'email', 'phone', 'position', 'linkedin', 'language', 'country', 'consent', 'consent_note', 'tags', 'notes'];
 const DEAL_FIELDS = ['title', 'company_id', 'contact_id', 'stage', 'value', 'currency', 'probability', 'expected_close', 'source', 'notes'];
 

@@ -5,6 +5,7 @@ import { getAccessToken, sendMail, senderEmail, textToHtml, uploadToDrive, drive
 import { draftQuote } from './ai';
 import { buildTechPdf, loadTech } from './rfq';
 import { storeDocument } from './work';
+import { loadSignAsset } from './sign';
 
 export const quoteRoutes = new Hono<AppEnv>();
 
@@ -23,7 +24,21 @@ export function computeTotals(items: Item[], discountPct: number, taxMode: strin
   return { subtotal, discount, net, taxes, tax_total, total: round2(net + tax_total) };
 }
 
-const QUOTE_FIELDS = ['title', 'company_id', 'contact_id', 'deal_id', 'language', 'currency', 'tax_mode', 'issue_date', 'valid_until', 'intro', 'outro', 'discount_pct', 'status'];
+const QUOTE_FIELDS = ['title', 'company_id', 'contact_id', 'deal_id', 'language', 'currency', 'tax_mode', 'issue_date', 'valid_until', 'intro', 'outro', 'discount_pct', 'status', 'signed'];
+
+// Spalte „signed“ kommt mit Migration 0006. Bis sie eingespielt ist, läuft alles ohne sie weiter (Standard: unterschrieben).
+let signedCol: boolean | null = null;
+async function hasSignedCol(db: D1Database) {
+  if (signedCol === null) {
+    const { results } = await db.prepare('PRAGMA table_info(quotes)').all<{ name: string }>();
+    signedCol = results.some((r) => r.name === 'signed');
+  }
+  return signedCol;
+}
+async function quoteData(db: D1Database, data: Record<string, unknown>) {
+  if (!(await hasSignedCol(db))) delete data.signed;
+  return data;
+}
 
 async function saveItems(db: D1Database, quoteId: string, items: Item[], defaultRate: number) {
   const stmts = [db.prepare('DELETE FROM quote_items WHERE quote_id = ?').bind(quoteId)];
@@ -100,6 +115,14 @@ export async function buildPdf(env: Env, id: string) {
       vat_id: company?.vat_id,
     },
     seller: { ...s, company_country: countryName(s.company_country) },
+    sign: q.signed === 0 ? null : {
+      signature: await loadSignAsset(env, 'signature').catch(() => null),
+      stamp: await loadSignAsset(env, 'stamp').catch(() => null),
+      name: s.sign_name || s.company_managing_director || '',
+      role: s.sign_role || '',
+      place: s.sign_place || s.company_city || '',
+      date: q.issue_date || todayIso(env.TIMEZONE || 'Europe/Berlin'),
+    },
   });
   return { bytes, filename: `${company?.customer_no ? company.customer_no + '_' : ''}${q.language === 'en' ? 'Proposal' : 'Angebot'}_${q.number}.pdf`, quote: q };
 }
@@ -148,7 +171,7 @@ quoteRoutes.post('/', async (c) => {
   const issue = body.issue_date || todayIso(tz);
   const id = uid();
   const number = await nextNumber(c.env.DB, 'quote', s.quote_prefix || 'AN', Number(issue.slice(0, 4)));
-  await insertRow(c.env.DB, 'quotes', {
+  await insertRow(c.env.DB, 'quotes', await quoteData(c.env.DB, {
     id,
     number,
     status: 'draft',
@@ -164,8 +187,9 @@ quoteRoutes.post('/', async (c) => {
     intro: body.intro ?? s[`quote_intro_${lang}`],
     outro: body.outro ?? s[`quote_outro_${lang}`],
     discount_pct: body.discount_pct || 0,
+    signed: body.signed === 0 || body.signed === false ? 0 : 1,
     created_by: c.get('user').id,
-  });
+  }));
   if (Array.isArray(body.items)) await saveItems(c.env.DB, id, body.items, Number(s.default_tax_rate) || 0);
   await refreshTotals(c.env.DB, id);
   return c.json(await loadQuote(c.env, id));
@@ -180,7 +204,9 @@ quoteRoutes.put('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json<any>();
   const s = await getSettings(c.env.DB);
-  await updateRow(c.env.DB, 'quotes', id, pick(body, QUOTE_FIELDS));
+  const data = pick(body, QUOTE_FIELDS);
+  if ('signed' in data) data.signed = data.signed === 0 || data.signed === '0' || data.signed === false ? 0 : 1;
+  await updateRow(c.env.DB, 'quotes', id, await quoteData(c.env.DB, data));
   if (Array.isArray(body.items)) await saveItems(c.env.DB, id, body.items, Number(s.default_tax_rate) || 0);
   await refreshTotals(c.env.DB, id);
   return c.json(await loadQuote(c.env, id));
@@ -197,7 +223,7 @@ quoteRoutes.post('/:id/duplicate', async (c) => {
   const s = await getSettings(c.env.DB);
   const id = uid();
   const issue = todayIso(c.env.TIMEZONE);
-  await insertRow(c.env.DB, 'quotes', {
+  await insertRow(c.env.DB, 'quotes', await quoteData(c.env.DB, {
     id,
     number: await nextNumber(c.env.DB, 'quote', s.quote_prefix || 'AN', Number(issue.slice(0, 4))),
     status: 'draft',
@@ -213,8 +239,9 @@ quoteRoutes.post('/:id/duplicate', async (c) => {
     intro: src.intro,
     outro: src.outro,
     discount_pct: src.discount_pct,
+    signed: src.signed ?? 1,
     created_by: c.get('user').id,
-  });
+  }));
   await saveItems(c.env.DB, id, src.items, Number(s.default_tax_rate) || 0);
   await refreshTotals(c.env.DB, id);
   const tp = await loadTech(c.env, src.id);

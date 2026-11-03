@@ -34,7 +34,7 @@ export function ProjectForm({ initial, onClose, onSaved }: { initial?: any; onCl
         <Field label="Start"><input type="date" value={v.start_date || ''} onChange={set('start_date')} /></Field>
         <Field label="Ende (geplant)"><input type="date" value={v.end_date || ''} onChange={set('end_date')} /></Field>
         <Field label="App-Adresse"><input value={v.app_url || ''} onChange={set('app_url')} placeholder="https://…" /></Field>
-        <Field label="devunox Review: Projekt-Kürzel" span={3} hint="Das Kürzel aus devunox Review (z. B. „geoauftrag“). Feedback zu diesem Projekt landet dann automatisch hier als Aufgabe. Wird bei neuem Feedback auch automatisch angelegt.">
+        <Field label="Kundenportal: Projekt-Kürzel" span={3} hint="Das Kürzel im Kundenportal (z. B. „geoauftrag“). Feedback zu diesem Projekt landet dann automatisch hier als Aufgabe. Wird bei neuem Feedback auch automatisch angelegt.">
           <input value={v.review_slug || ''} onChange={set('review_slug')} placeholder="geoauftrag" />
         </Field>
         <Field label="Beschreibung" span={3}><textarea rows={3} value={v.description || ''} onChange={set('description')} /></Field>
@@ -85,7 +85,7 @@ export function ProjectsList() {
     <>
       <PageHead
         title="Projekte"
-        sub="Umsetzung je Kunde: Aufgaben, Feedback aus devunox Review und Dokumente."
+        sub="Umsetzung je Kunde: Aufgaben, Kunden-Feedback und Dokumente."
         actions={<>
           <div className="seg">
             {[['open', 'Laufend'], ['done', 'Abgeschlossen'], ['all', 'Alle']].map(([k, l]) => <button key={k} className={status === k ? 'active' : ''} onClick={() => setStatus(k)}>{l}</button>)}
@@ -94,7 +94,7 @@ export function ProjectsList() {
         </>}
       />
       {!list ? <Spinner /> : filtered.length === 0 ? (
-        <div className="card"><Empty title="Noch keine Projekte" text="Lege ein Projekt an – oder erstelle es direkt aus einem angenommenen Angebot. Feedback aus devunox Review legt Projekte automatisch an." action={<button className="btn primary" onClick={() => setForm(true)}>+ Projekt</button>} /></div>
+        <div className="card"><Empty title="Noch keine Projekte" text="Lege ein Projekt an – oder erstelle es direkt aus einem angenommenen Angebot. Kunden-Feedback legt Projekte automatisch an." action={<button className="btn primary" onClick={() => setForm(true)}>+ Projekt</button>} /></div>
       ) : <ProjectCards list={filtered} />}
       {form && <ProjectForm onClose={() => setForm(false)} onSaved={(p) => { reload(); go(`/projects/${p.id}`); }} />}
     </>
@@ -117,7 +117,7 @@ export function ProjectDetail({ id, me }: { id: string; me: Me }) {
         title={<span style={{ display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>{p.name} <span className={`badge ${PROJECT_STATUS[p.status]?.[1]}`}>{PROJECT_STATUS[p.status]?.[0]}</span></span>}
         sub={<>{p.customer_no && <span className="cno" style={{ marginRight: 8 }}>{p.customer_no}</span>}{p.company_name ? <a href={`#/companies/${p.company_id}`}>{p.company_name}</a> : 'ohne Kunde'}{p.quote_number && <> · Angebot <a href={`#/quotes/${p.quote_id}`}>{p.quote_number}</a></>}</>}
         actions={<>
-          {p.review_url ? <a className="btn" href={p.review_url} target="_blank" rel="noreferrer">devunox Review ↗</a> : <button className="btn accent" onClick={() => setConnect(true)}>In devunox Review anlegen</button>}
+          {p.review_url ? <a className="btn" href={p.review_url} target="_blank" rel="noreferrer">Kundenportal ↗</a> : <button className="btn accent" onClick={() => setConnect(true)}>Im Kundenportal anlegen</button>}
           <button className="btn" onClick={() => setReport(true)}>Statusbericht</button>
           {p.app_url && <a className="btn" href={p.app_url} target="_blank" rel="noreferrer">App öffnen ↗</a>}
           <button className="btn" onClick={() => setEdit(true)}>Bearbeiten</button>
@@ -132,7 +132,7 @@ export function ProjectDetail({ id, me }: { id: string; me: Me }) {
       {tab === 'time' && <div className="card"><TimeEntries projectId={id} companyId={p.company_id || undefined} title={p.name} /></div>}
       {tab === 'tasks' && (
         <>
-          {!p.review_slug && <div className="legal" style={{ marginBottom: 14, background: 'var(--violet-soft)', color: 'var(--violet)' }}>Tipp: Mit „In devunox Review anlegen“ bekommt der Kunde einen Feedback-Zugang – sein Feedback landet dann automatisch hier als Aufgabe.</div>}
+          {!p.review_slug && <div className="legal" style={{ marginBottom: 14, background: 'var(--violet-soft)', color: 'var(--violet)' }}>Tipp: Mit „Im Kundenportal anlegen“ bekommt der Kunde einen Feedback-Zugang – sein Feedback landet dann automatisch hier als Aufgabe.</div>}
           <TaskBoard filter={`project_id=${id}`} projectId={id} companyId={p.company_id} showProject={false} />
         </>
       )}
@@ -189,7 +189,7 @@ function ReviewConnect({ project, onClose, onDone }: { project: any; onClose: ()
   const [result, setResult] = useState<any>(null);
   const { busy, run } = useAction();
   const toast = useToast();
-  const go2 = () => run('c', async () => { const r = await api.post(`/projects/${project.id}/review-connect`, v); setResult(r); onDone(); }, 'Projekt in devunox Review angelegt');
+  const go2 = () => run('c', async () => { const r = await api.post(`/projects/${project.id}/review-connect`, v); setResult(r); onDone(); }, 'Projekt im Kundenportal angelegt');
   const inviteText = (r: any) => {
     const en = r.contact?.language === 'en';
     return en
@@ -201,10 +201,10 @@ function ReviewConnect({ project, onClose, onDone }: { project: any; onClose: ()
     await api.post(`/contacts/${result.contact.id}/send-email`, { subject: en ? `Feedback access: ${project.name}` : `Ihr Feedback-Zugang: ${project.name}`, body: inviteText(result) });
   }, 'Einladung per Gmail gesendet');
   return (
-    <Modal title="In devunox Review anlegen" onClose={onClose} footer={result ? <button className="btn primary" onClick={onClose}>Fertig</button> : <><button className="btn" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={!!busy} onClick={go2}>{busy ? 'Lege an…' : 'Anlegen'}</button></>}>
+    <Modal title="Im Kundenportal anlegen" onClose={onClose} footer={result ? <button className="btn primary" onClick={onClose}>Fertig</button> : <><button className="btn" onClick={onClose}>Abbrechen</button><button className="btn primary" disabled={!!busy} onClick={go2}>{busy ? 'Lege an…' : 'Anlegen'}</button></>}>
       {!result ? (
         <div className="form">
-          <p className="muted full" style={{ margin: 0, fontSize: 13 }}>Legt in devunox Review den Kunden {project.customer_no ? `(${project.customer_no}) ` : ''}mit Feedback-Zugang und dieses Projekt an. Feedback des Kunden erscheint danach automatisch hier als Aufgabe.</p>
+          <p className="muted full" style={{ margin: 0, fontSize: 13 }}>Legt im Kundenportal den Kunden {project.customer_no ? `(${project.customer_no}) ` : ''}mit Feedback-Zugang und dieses Projekt an. Feedback des Kunden erscheint danach automatisch hier als Aufgabe.</p>
           <Field label="Ansprechpartner (bekommt den Zugang)" span={2}><SelectContact value={v.contact_id} companyId={project.company_id} onChange={(id) => setV({ ...v, contact_id: id })} /></Field>
           <Field label="Adresse der App (mit Widget)" span={2}><input value={v.app_url} onChange={(e) => setV({ ...v, app_url: e.target.value })} placeholder="https://…" /></Field>
           <Field label="GitHub-Repo (optional)" span={2}><input value={v.repo_url} onChange={(e) => setV({ ...v, repo_url: e.target.value })} placeholder="https://github.com/HYigit19/…" /></Field>
@@ -221,7 +221,7 @@ function ReviewConnect({ project, onClose, onDone }: { project: any; onClose: ()
               </div>
             </>
           ) : (
-            <div className="muted" style={{ fontSize: 13 }}>{result.contact_has_access ? 'Der Kunde hat bereits einen Zugang zu devunox Review – das neue Projekt ist dort sofort sichtbar.' : 'Kein Kundenzugang angelegt (kein Ansprechpartner mit E-Mail gewählt). Den Zugang kannst du später in devunox Review vergeben.'}</div>
+            <div className="muted" style={{ fontSize: 13 }}>{result.contact_has_access ? 'Der Kunde hat bereits einen Zugang zum Kundenportal – das neue Projekt ist dort sofort sichtbar.' : 'Kein Kundenzugang angelegt (kein Ansprechpartner mit E-Mail gewählt). Den Zugang kannst du später in Kundenportal vergeben.'}</div>
           )}
         </div>
       )}

@@ -24,8 +24,14 @@ Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claud
   - Verschieben (auch per Ziehen auf einen Ordner), Umbenennen, Tags, Suche, Mehrfachauswahl, Vorschau und Download.
   - Speicher: Cloudflare R2 mit Jurisdiktion EU.
   - Versendete Angebots-PDFs werden automatisch im Ordner „Angebote“ des Kunden abgelegt.
+- **PDF bearbeiten & unterschreiben:** PDFs aus der Ablage oder vom Gerät öffnen und digitale Unterschrift, Firmenstempel, Text, Datum und den Vermerk „Digital unterschrieben und gestempelt“ / „Digitally signed and stamped“ (DE, EN oder beides) per Ziehen platzieren. Speichern als `…_signiert.pdf` in der Ablage oder herunterladen.
+  - Unterschrift neu zeichnen (Finger, Stift, Maus) oder als Bild hochladen; Stempel aus den Firmendaten erzeugen. Gespeichert in R2 unter `_sign/`, sonst gelten die Standardbilder aus `public/brand/sign/`.
+  - Hinweis: einfache elektronische Signatur (Bild), keine qualifizierte Signatur.
+- **Meine Ablage:** Dokumente ohne Kundenbezug (Verträge, Vorlagen).
 - **CSV-Import** von Kontakten (LinkedIn Sales Navigator, Apollo.io, Excel)
-- **Angebote:** Positionen, Leistungskatalog, Rabatte, DE/EN, EUR/USD/PLN/CHF
+- **Angebote:** Positionen, Leistungskatalog, Rabatte, EUR/USD/PLN/CHF
+  - „Angebot erstellen“-Dialog mit Sprachwahl; im Angebot schaltet ein Button DE ⇄ EN um (Standardtexte und Einheiten werden mit übersetzt)
+  - Briefkopf mit Logo und Firmendaten, Live-Vorschau im Editor; Unterschrift, Firmenstempel und Vermerk im PDF (je Angebot abschaltbar)
   - Steuer-Varianten: Inland, Reverse Charge, Nicht-EU, ohne MwSt.
   - PDF-Erzeugung mit fortlaufender Nummer (AN-2026-0001)
   - Erstentwurf per KI
@@ -47,7 +53,24 @@ Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claud
   - Bounces werden erkannt, Abmeldelink nach RFC 8058 (One-Click)
   - Rechtsschutz: Kontakte in EU/DACH/UK werden nur mit Einwilligung oder als Bestandskunde angeschrieben
 
-## devunox Review ↔ CRM
+
+## Neu: Kundenmanagement, Kundenportal im CRM, DMS (11/2026)
+
+Das ausführliche **Benutzerhandbuch mit Screenshots** liegt unter `src/ui/public/docs/devunox_CRM_Benutzerhandbuch.pdf` und wird nach jedem Update automatisch in **Dokumente → Meine Ablage → Handbuch** abgelegt.
+
+- **Kundenportal im CRM (ehemals devunox Review):** Der Review-Code läuft jetzt in diesem Worker (`src/worker/review-app/`, Oberfläche `src/ui/public/review/`). Er nutzt die bestehende Datenbank `devunox-review-db` (Binding `RDB`) und den Bucket `devunox-review-dateien` (`RFILES`) – alle Daten bleiben erhalten. Welche Oberfläche ausgeliefert wird, entscheidet der Hostname (`CRM_HOSTS` = CRM, alle anderen Adressen = Kundenportal). Synchronisation CRM ⇄ Portal läuft intern, ohne Webhook-Secret.
+  - Mehrere Personen je Kunde, Recht „darf Mehraufwand freigeben“, Freigabe von Mehraufwand (Change Requests) im Portal.
+  - Seite **Kunden-Feedback** und Feedback-Ansicht in jeder Aufgabe (Screenshot, Verlauf, Antwort an den Kunden).
+- **Kunden-Cockpit:** Health-Score je Kunde, MRR, Marge, Stundenkontingente, Warnungen.
+- **Kundensysteme:** Systeme & Hosting (devunox Cloud, On-Premise, AWS/Azure/…), Überwachung alle 15 Minuten, Releases, Abos & Abrechnung, Stundenkontingente, Lizenzen (Ed25519-signiert), Verträge & Fristen, Onboarding/Offboarding-Checklisten, Zugangsdaten-Tresor (verschlüsselt, protokolliert), Monatsberichte (PDF DE/EN).
+- **Team:** Rollen Admin/Mitarbeiter, Betreuer je Kunde.
+- **DMS:** Meine Ablage, Zuletzt, Favoriten, Geteilt, Papierkorb (30 Tage), Versionen, Vorschau, Freigabelinks (Ablauf, Passwort, `/s/…`), ZIP-Download, Kopieren/Verschieben zwischen Ablagen.
+
+**Nach dem Update einmalig:**
+1. `npx wrangler d1 migrations apply DB --remote` (0006–0009). Ohne die Updates laufen die bisherigen Funktionen weiter; neue Bereiche zeigen einen Hinweis.
+2. Custom Domain `project.review.devunox.ai` im Dashboard vom Worker `devunox-review` entfernen und beim Worker `devunox-crm` hinzufügen. Danach kann der alte Review-Worker gelöscht werden. Weitere Kunden-Domains einfach zusätzlich an `devunox-crm` hängen.
+
+## devunox Review ↔ CRM (alte, getrennte Variante)
 
 So funktioniert die Verbindung:
 - **Aus dem CRM anlegen:** Im Projekt auf „In devunox Review anlegen“ klicken. Das legt in Review den Kunden mit seiner Kundennummer an, dazu den Feedback-Zugang für den Ansprechpartner und das Projekt.
@@ -79,7 +102,7 @@ Solange kein Secret gesetzt ist, passiert nichts.
 
 ### 1. Cloudflare-Datenbank – bereits erledigt
 
-Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt, alle Migrationen (0001–0004) sind eingespielt.
+Die D1-Datenbank `devunox-crm` (Region Westeuropa) ist angelegt, die Migrationen 0001–0005 sind eingespielt. **Neu: 0006** (`npx wrangler d1 migrations apply DB --remote`). Bis dahin läuft die App weiter, nur der Schalter „Unterschrift im PDF“ wird nicht gespeichert.
 Den R2-Speicher `devunox-crm-dokumente` (EU) legt das erste Deployment automatisch an. Falls das Build-Log einen Fehler dazu zeigt: Im Dashboard unter **R2 → Create bucket** den Namen `devunox-crm-dokumente` eintragen, *Location → Specify jurisdiction → EU* wählen und dann neu deployen.
 Die Adresse `crm.devunox.ai` richtet das Deployment ebenfalls ein (`routes` in `wrangler.jsonc`), weil devunox.ai im selben Cloudflare-Konto liegt. Ihre ID steht schon in `wrangler.jsonc`.
 

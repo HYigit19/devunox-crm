@@ -13,7 +13,13 @@ export interface Env {
   DEV_AUTH?: string;
   DOCS: R2Bucket;               // Dokumentenablage (R2, EU)
   REVIEW_URL?: string;          // z. B. https://project.review.devunox.ai
-  REVIEW_WEBHOOK_SECRET?: string; // gemeinsames Geheimnis mit devunox Review           // nur lokal: "1" erlaubt Login ohne Google
+  REVIEW_WEBHOOK_SECRET?: string; // optional – nur für die alte, getrennte Review-App nötig
+  RDB?: D1Database;             // Kundenportal (ehemals devunox Review): Datenbank devunox-review-db
+  RFILES?: R2Bucket;            // Kundenportal: Screenshots und Anhänge (R2 EU)
+  CRM_HOSTS?: string;           // Hostnamen des CRM (Standard crm.devunox.ai) – alle anderen zeigen das Kundenportal
+  EMAIL?: SendEmail;            // Benachrichtigung bei neuem Kunden-Feedback
+  MAIL_FROM?: string;
+  ADMIN_NOTIFY?: string;           // nur lokal: "1" erlaubt Login ohne Google
 }
 
 export type User = { id: string; email: string; name: string | null; picture: string | null };
@@ -165,6 +171,12 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   drive_folder_id: '',
   app_url: '',
   drive_quotes_folder_id: '',
+  sign_name: 'Hüseyin Yigit',
+  sign_role: 'CEO · devunox AI',
+  sign_place: '',
+  internal_hour_cost: '45',        // interne Kosten je Stunde (Rentabilität je Kunde)
+  report_auto: '1',                // Monatsberichte am 1. automatisch als Entwurf erzeugen
+  health_contact_days: '30',       // ohne Kontakt seit … Tagen → Hinweis im Kunden-Cockpit
 };
 
 export async function getSettings(db: D1Database): Promise<Record<string, string>> {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Field, PageHead, Spinner, useAction, useLoad } from '../components';
 import { PasswordForm, type Me } from '../main';
+import { TeamCard } from './Cockpit';
 
 const DAYS = [['1', 'Mo'], ['2', 'Di'], ['3', 'Mi'], ['4', 'Do'], ['5', 'Fr'], ['6', 'Sa'], ['7', 'So']];
 
@@ -24,11 +25,11 @@ export function Settings({ me }: { me: Me }) {
 
   return (
     <>
-      <PageHead title="Einstellungen" actions={<button className="btn primary" disabled={!!busy} onClick={save}>Speichern</button>} />
+      <PageHead title="Einstellungen" actions={me.role === 'member' ? <span className="badge grey">Nur Admins können Einstellungen ändern</span> : <button className="btn primary" disabled={!!busy} onClick={save}>Speichern</button>} />
       <div className="grid side">
         <div className="stack">
           <div className="card">
-            <h2 style={{ marginBottom: 14 }}>Firmendaten (Angebots-PDF)</h2>
+            <div className="card-head"><h2>Firmendaten (Briefkopf, Angebots-PDF, Stempel)</h2><a className="btn sm ghost" href="#/pdf">Unterschrift & Stempel →</a></div>
             <div className="form c3">
               {f('company_name', 'Firmenname (Logo-Text)')}
               {f('company_legal', 'Rechtlicher Name', { span: 2, ph: 'Devunox Solutions sp. z o.o.' })}
@@ -88,8 +89,22 @@ export function Settings({ me }: { me: Me }) {
               {f('send_hour_to', 'Versand bis (Uhr)')}
             </div>
           </div>
+          <div className="card">
+            <h2 style={{ marginBottom: 14 }}>Kundenmanagement</h2>
+            <div className="form c3">
+              {f('internal_hour_cost', 'Interne Kosten je Stunde (€)', { hint: 'für die Marge je Kunde im Cockpit' })}
+              {f('health_contact_days', 'Hinweis ohne Kontakt nach (Tagen)')}
+              <Field label="Monatsberichte">
+                <select value={v.report_auto || '1'} onChange={(e) => setV({ ...v, report_auto: e.target.value })}>
+                  <option value="1">am 1. automatisch als Entwurf</option>
+                  <option value="0">nur manuell</option>
+                </select>
+              </Field>
+            </div>
+          </div>
         </div>
         <div className="stack">
+          <TeamCard />
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>Google / Gmail</h2>
             <dl className="dl">
@@ -110,12 +125,12 @@ export function Settings({ me }: { me: Me }) {
             </div>
           )}
           <div className="card">
-            <h2 style={{ marginBottom: 12 }}>devunox Review</h2>
+            <h2 style={{ marginBottom: 12 }}>Kundenportal</h2>
             <dl className="dl">
-              <dt>Status</dt><dd>{me.review ? '✓ verbunden' : 'nicht verbunden – Secret REVIEW_WEBHOOK_SECRET fehlt'}</dd>
+              <dt>Status</dt><dd>{(me as any).portal ? '✓ im CRM eingebaut' : me.review ? '✓ verbunden (separate App)' : 'nicht eingerichtet'}</dd>
               <dt>Adresse</dt><dd>{me.review_url ? <a href={me.review_url} target="_blank" rel="noreferrer">{me.review_url.replace('https://', '')}</a> : '–'}</dd>
             </dl>
-            <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Kunden-Feedback wird automatisch zur Aufgabe im Projekt; Statuswechsel gehen zurück an Review. Zuordnung über die Kundennummer.</p>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Kunden melden sich mit eigenem Login an und geben Feedback direkt in ihrer App. Jeder Punkt wird automatisch zur Aufgabe beim Kunden; Statuswechsel gehen zurück ins Portal. Zugänge verwaltest du auf der Firmenseite unter „Kundenportal“.</p>
           </div>
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>KI</h2>
@@ -127,7 +142,7 @@ export function Settings({ me }: { me: Me }) {
           <div className="card">
             <h2 style={{ marginBottom: 12 }}>Agent-Protokoll</h2>
             {!log ? <Spinner /> : log.length === 0 ? <div className="muted">Noch keine Einträge.</div> : log.slice(0, 25).map((l) => (
-              <div key={l.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid #f0f2f6' }}>
+              <div key={l.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
                 <span className={`badge ${l.level === 'error' ? 'red' : l.level === 'warn' ? 'amber' : 'grey'}`}>{l.level}</span> {l.message}
               </div>
             ))}

@@ -9,7 +9,8 @@
     "directory": "./dist/client",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/auth/*", "/u/*", "/hooks/*"]
+    // true: jede Anfrage geht zuerst an den Worker – nötig, weil derselbe Worker je nach Hostname CRM oder Kundenportal ausliefert
+    "run_worker_first": true
   },
   "d1_databases": [
     {
@@ -17,10 +18,22 @@
       "database_name": "devunox-crm",
       "database_id": "e21a4d40-644f-47b1-bff1-3f146c37e0f8",
       "migrations_dir": "migrations"
+    },
+    // Kundenportal (ehemals devunox Review): bestehende Datenbank wird direkt weiterverwendet, Tabellen legt das Portal selbst an
+    {
+      "binding": "RDB",
+      "database_name": "devunox-review-db",
+      "database_id": "fa92fa58-9f71-4a6e-8c47-27e248e07444"
     }
   ],
   // Dokumentenablage je Kunde/Projekt – R2 mit Jurisdiktion EU (wird beim ersten Deployment automatisch angelegt)
-  "r2_buckets": [{ "binding": "DOCS", "bucket_name": "devunox-crm-dokumente", "jurisdiction": "eu" }],
+  "r2_buckets": [
+    { "binding": "DOCS", "bucket_name": "devunox-crm-dokumente", "jurisdiction": "eu" },
+    // Kundenportal: Screenshots und Anhänge (bestehender Bucket)
+    { "binding": "RFILES", "bucket_name": "devunox-review-dateien", "jurisdiction": "eu" }
+  ],
+  // Mail an dich bei neuem Kunden-Feedback (Cloudflare Email Routing)
+  "send_email": [{ "name": "EMAIL", "destination_address": "hyigit@outlook.de" }],
   // KI-Agent: alle 15 Minuten Antworten prüfen und fällige Mails senden
   "triggers": { "crons": ["*/15 * * * *"] },
   "observability": { "enabled": true },
@@ -30,7 +43,10 @@
     "ALLOWED_EMAILS": "yigit@devunox-consulting.com",
     "AI_MODEL": "claude-sonnet-5-5",
     "TIMEZONE": "Europe/Berlin",
-    "REVIEW_URL": "https://project.review.devunox.ai"
+    "REVIEW_URL": "https://project.review.devunox.ai",
+    "CRM_HOSTS": "crm.devunox.ai",
+    "MAIL_FROM": "review@devunox.ai",
+    "ADMIN_NOTIFY": "hyigit@outlook.de"
   }
   // Secrets (im Cloudflare-Dashboard oder per `wrangler secret put`):
   // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ANTHROPIC_API_KEY, ENCRYPTION_KEY, REVIEW_WEBHOOK_SECRET

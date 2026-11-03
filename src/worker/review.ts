@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 import { AppEnv, Env, uid } from './util';
 import { createCompany } from './work';
+import { portalCall, portalEnabled, setPortalDispatch } from './portal';
 
 const enc = new TextEncoder();
 
@@ -34,7 +35,8 @@ const CAT_DE: Record<string, string> = { fehler: 'Fehler', design: 'Design', fun
 const REVIEW_STATUS_DE: Record<string, string> = { offen: 'Offen', in_arbeit: 'In Arbeit', pruefen: 'Bitte prüfen', erledigt: 'Erledigt (vom Kunden abgenommen)', abgelehnt: 'Wird nicht umgesetzt' };
 
 type ReviewEvent = {
-  event: 'item.created' | 'item.comment' | 'item.status' | 'ping';
+  event: 'item.created' | 'item.comment' | 'item.status' | 'item.cr' | 'ping';
+  cr?: { decision: 'approved' | 'declined'; days?: number | null; amount?: number | null; currency?: string | null; note?: string };
   project: { id: number; slug: string; name: string; app_url?: string; hub_url?: string };
   client?: { id: number; name: string; customer_no?: string | null };
   item?: { id: number; no: number; kind: string; title: string; body?: string; category?: string; priority?: string; status: string; page_url?: string; internal?: boolean; link?: string };
@@ -72,18 +74,15 @@ async function note(env: Env, task: any, subject: string, body?: string | null, 
 
 export const reviewHook = new Hono<AppEnv>();
 
-reviewHook.post('/review', async (c) => {
-  const raw = await c.req.text();
-  const ok = await verifySignature(c.env.REVIEW_WEBHOOK_SECRET || '', c.req.header('x-devunox-timestamp'), c.req.header('x-devunox-signature'), raw);
-  if (!ok) return c.json({ error: 'Ungültige Signatur' }, 401);
-  const ev = JSON.parse(raw) as ReviewEvent;
-  if (ev.event === 'ping') return c.json({ ok: true, pong: true });
-  if (!ev.project?.slug || !ev.item) return c.json({ error: 'Ungültige Nachricht' }, 400);
+/** Verarbeitet ein Ereignis aus dem Kundenportal: neues Feedback → Aufgabe beim Kunden, Antworten/Status → Verlauf. */
+export async function handleReviewEvent(env: Env, ev: ReviewEvent): Promise<{ ok: boolean; task_id?: string; skipped?: string; error?: string }> {
+  if (ev.event === 'ping') return { ok: true };
+  if (!ev.project?.slug || !ev.item) return { ok: false, error: 'Ungültige Nachricht' };
   const it = ev.item;
-  if (it.internal) return c.json({ ok: true, skipped: 'intern' });
-  const project = await ensureProject(c.env, ev);
+  if (it.internal) return { ok: true, skipped: 'intern' };
+  const project = await ensureProject(env, ev);
   const extId = `review:${it.id}`;
-  let task = await c.env.DB.prepare('SELECT * FROM tasks WHERE external_id = ?').bind(extId).first<any>();
+  let task = await env.DB.prepare('SELECT * FROM tasks WHERE external_id = ?').bind(extId).first<any>();
 
   if (!task) {
     // Auch Antworten/Status zu älteren Punkten legen die Aufgabe nach
@@ -95,7 +94,7 @@ reviewHook.post('/review', async (c) => {
     ]
       .filter(Boolean)
       .join('\n\n');
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       `INSERT INTO tasks (id, title, description, status, priority, category, project_id, company_id, source, external_id, external_url, external_status, unread, sort)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'review', ?, ?, ?, 1, ?)`,
     )
@@ -104,49 +103,62 @@ reviewHook.post('/review', async (c) => {
         CAT_DE[it.category || ''] || it.category || null, project.id, project.company_id, extId, it.link || null, it.status, -Date.now() / 1000,
       )
       .run();
-    task = await c.env.DB.prepare('SELECT * FROM tasks WHERE id = ?').bind(id).first<any>();
-    await note(c.env, task, ev.event === 'item.created' ? 'Feedback aus devunox Review' : 'Aus devunox Review übernommen', null, 'system');
-    if (ev.event === 'item.created') return c.json({ ok: true, task_id: id });
+    task = await env.DB.prepare('SELECT * FROM tasks WHERE id = ?').bind(id).first<any>();
+    await note(env, task, ev.event === 'item.created' ? 'Feedback aus devunox Review' : 'Aus devunox Review übernommen', null, 'system');
+    if (ev.event === 'item.created') return { ok: true, task_id: id };
   }
 
   if (ev.event === 'item.comment') {
-    await note(c.env, task, `Antwort von ${ev.author?.name || 'Kunde'}`, ev.comment || '(Anhang)', 'email');
-    await c.env.DB.prepare(`UPDATE tasks SET unread = 1, updated_at = datetime('now') WHERE id = ?`).bind(task.id).run();
+    await note(env, task, `Antwort von ${ev.author?.name || 'Kunde'}`, ev.comment || '(Anhang)', 'email');
+    await env.DB.prepare(`UPDATE tasks SET unread = 1, updated_at = datetime('now') WHERE id = ?`).bind(task.id).run();
   } else if (ev.event === 'item.status' && ev.status) {
     const to = FROM_REVIEW[ev.status.to] || task.status;
-    await c.env.DB.prepare(
+    await env.DB.prepare(
       `UPDATE tasks SET status = ?, external_status = ?, unread = 1, completed_at = CASE WHEN ? = 'done' THEN datetime('now') ELSE NULL END, updated_at = datetime('now') WHERE id = ?`,
     )
       .bind(to, ev.status.to, to, task.id)
       .run();
     const reopened = ev.status.to === 'offen' && ['pruefen', 'erledigt'].includes(ev.status.from);
     await note(
-      c.env,
+      env,
       task,
       reopened ? `${ev.author?.name || 'Kunde'}: Noch nicht in Ordnung` : `Review-Status: ${REVIEW_STATUS_DE[ev.status.to] || ev.status.to}`,
       ev.status.note || null,
       'system',
     );
+  } else if (ev.event === 'item.cr' && ev.cr) {
+    const money = ev.cr.amount ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: ev.cr.currency || 'EUR' }).format(ev.cr.amount) : '';
+    const what = [ev.cr.days ? `${String(ev.cr.days).replace('.', ',')} PT` : '', money].filter(Boolean).join(' · ');
+    await note(env, task, `${ev.author?.name || 'Kunde'}: Mehraufwand ${ev.cr.decision === 'approved' ? 'freigegeben' : 'abgelehnt'}${what ? ` (${what})` : ''}`, ev.cr.note || null, 'system');
+    await env.DB.prepare(`UPDATE tasks SET unread = 1, priority = CASE WHEN ? = 'approved' THEN 'high' ELSE priority END, updated_at = datetime('now') WHERE id = ?`).bind(ev.cr.decision, task.id).run();
   } else if (ev.event === 'item.created') {
     // Doppelte Zustellung – nichts tun
   }
-  return c.json({ ok: true, task_id: task.id });
+  return { ok: true, task_id: task.id };
+}
+
+// Alte, getrennte Review-App: signierter Webhook (bleibt für den Übergang erhalten)
+reviewHook.post('/review', async (c) => {
+  const raw = await c.req.text();
+  const ok = await verifySignature(c.env.REVIEW_WEBHOOK_SECRET || '', c.req.header('x-devunox-timestamp'), c.req.header('x-devunox-signature'), raw);
+  if (!ok) return c.json({ error: 'Ungültige Signatur' }, 401);
+  const r = await handleReviewEvent(c.env, JSON.parse(raw) as ReviewEvent);
+  return c.json(r, r.ok ? 200 : 400);
 });
+
+// Eingebautes Kundenportal: Ereignisse direkt übergeben
+setPortalDispatch((env, payload) => handleReviewEvent(env, payload as ReviewEvent));
+
 
 /** Meldet eine Statusänderung aus dem CRM an devunox Review. */
 export async function pushTaskStatusToReview(env: Env, task: any, status: string, noteText?: string): Promise<string> {
-  if (!env.REVIEW_URL || !env.REVIEW_WEBHOOK_SECRET) return 'nicht konfiguriert';
+  if (!portalEnabled(env) && (!env.REVIEW_URL || !env.REVIEW_WEBHOOK_SECRET)) return 'nicht konfiguriert';
   const itemId = Number(String(task.external_id).replace('review:', ''));
   const target = TO_REVIEW[status];
   if (!itemId || !target) return 'übersprungen';
   if (target === task.external_status) return 'unverändert';
-  const body = JSON.stringify({ item_id: itemId, status: target, note: noteText || '' });
-  const ts = String(Math.floor(Date.now() / 1000));
-  const res = await fetch(`${env.REVIEW_URL.replace(/\/$/, '')}/api/integrations/crm/status`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-devunox-timestamp': ts, 'x-devunox-signature': await sign(env.REVIEW_WEBHOOK_SECRET, ts, body) },
-    body,
-  });
+  const payload = { item_id: itemId, status: target, note: noteText || '' };
+  const res = portalEnabled(env) ? await portalCall(env, '/api/integrations/crm/status', payload) : await signedPost(env, '/api/integrations/crm/status', payload);
   if (!res.ok) throw new Error(`Review antwortet ${res.status}`);
   await env.DB.prepare('UPDATE tasks SET external_status = ? WHERE id = ?').bind(target, task.id).run();
   return target;
@@ -155,15 +167,25 @@ export async function pushTaskStatusToReview(env: Env, task: any, status: string
 export { sign as signPayload };
 
 /** Legt Kunde (über die Kundennummer), Kundenzugang und Projekt in devunox Review an und verknüpft es mit dem CRM-Projekt. */
+async function signedPost(env: Env, path: string, payload: unknown) {
+  const body = JSON.stringify(payload);
+  const ts = String(Math.floor(Date.now() / 1000));
+  return fetch(`${env.REVIEW_URL!.replace(/\/$/, '')}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-devunox-timestamp': ts, 'x-devunox-signature': await sign(env.REVIEW_WEBHOOK_SECRET!, ts, body) },
+    body,
+  });
+}
+
 export async function connectProjectToReview(env: Env, projectId: string, opts: { contact_id?: string | null; app_url?: string | null; repo_url?: string | null }) {
-  if (!env.REVIEW_URL || !env.REVIEW_WEBHOOK_SECRET) throw new Error('devunox Review ist nicht verbunden (REVIEW_URL / REVIEW_WEBHOOK_SECRET fehlen).');
+  if (!portalEnabled(env) && (!env.REVIEW_URL || !env.REVIEW_WEBHOOK_SECRET)) throw new Error('Kundenportal ist nicht eingerichtet.');
   const p = await env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>();
   if (!p) throw new Error('Projekt nicht gefunden');
   if (!p.company_id) throw new Error('Bitte dem Projekt zuerst einen Kunden zuordnen.');
   const co = await env.DB.prepare('SELECT * FROM companies WHERE id = ?').bind(p.company_id).first<any>();
   const contactId = opts.contact_id || p.contact_id;
   const ct = contactId ? await env.DB.prepare('SELECT * FROM contacts WHERE id = ?').bind(contactId).first<any>() : null;
-  const body = JSON.stringify({
+  const payload = {
     customer_no: co.customer_no,
     company_name: co.name,
     contact_name: ct ? [ct.first_name, ct.last_name].filter(Boolean).join(' ') : '',
@@ -174,15 +196,10 @@ export async function connectProjectToReview(env: Env, projectId: string, opts: 
     app_url: opts.app_url || p.app_url || '',
     repo_url: opts.repo_url || '',
     slug: p.review_slug || undefined,
-  });
-  const ts = String(Math.floor(Date.now() / 1000));
-  const res = await fetch(`${env.REVIEW_URL.replace(/\/$/, '')}/api/integrations/crm/project`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-devunox-timestamp': ts, 'x-devunox-signature': await sign(env.REVIEW_WEBHOOK_SECRET, ts, body) },
-    body,
-  });
+  };
+  const res = portalEnabled(env) ? await portalCall(env, '/api/integrations/crm/project', payload) : await signedPost(env, '/api/integrations/crm/project', payload);
   const data = (await res.json().catch(() => ({}))) as any;
-  if (!res.ok) throw new Error('devunox Review: ' + (data.error || res.status));
+  if (!res.ok) throw new Error('Kundenportal: ' + (data.error || res.status));
   await env.DB.batch([
     env.DB.prepare(`UPDATE projects SET review_slug = ?, review_url = ?, app_url = COALESCE(?, app_url), contact_id = COALESCE(contact_id, ?), updated_at = datetime('now') WHERE id = ?`).bind(
       data.project.slug, data.hub_url, opts.app_url || null, contactId || null, projectId,
