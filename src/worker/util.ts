@@ -101,6 +101,11 @@ export async function decrypt(secret: string, data: string): Promise<string> {
   return dec.decode(pt);
 }
 
+/** Schlüssel für Signaturen (Links, Cookies, interne Übergabe). Fällt auf andere Secrets zurück, falls ENCRYPTION_KEY fehlt. */
+export function signKey(env: { ENCRYPTION_KEY?: string; GOOGLE_CLIENT_SECRET?: string; ANTHROPIC_API_KEY?: string }): string {
+  return env.ENCRYPTION_KEY || env.GOOGLE_CLIENT_SECRET || env.ANTHROPIC_API_KEY || 'devunox-crm-signatur';
+}
+
 export async function hmac(secret: string, msg: string): Promise<string> {
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(msg));

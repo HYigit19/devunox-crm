@@ -1,4 +1,4 @@
-import { Env, CONSENT_COUNTRIES, getSettings, hmac, log, uid } from './util';
+import { Env, CONSENT_COUNTRIES, getSettings, hmac, signKey, log, uid } from './util';
 import { getAccessToken, sendMail, findReply, textToHtml } from './google';
 
 
@@ -177,7 +177,7 @@ export async function classifyReply(env: Env, text: string) {
 
 export async function unsubscribeUrl(env: Env, contactId: string) {
   const base = (env.APP_URL || (await getSettings(env.DB)).app_url || '').replace(/\/$/, '');
-  return `${base}/u/${contactId}.${await hmac(env.ENCRYPTION_KEY, contactId)}`;
+  return `${base}/u/${contactId}.${await hmac(signKey(env), contactId)}`;
 }
 
 export function footer(lang: 'de' | 'en', signature: string, unsub: string) {

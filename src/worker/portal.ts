@@ -3,7 +3,7 @@
 // - Welche Oberfläche ausgeliefert wird, entscheidet der Hostname: CRM-Adresse → CRM, jede andere Adresse → Kundenportal.
 //   So können Kunden später eigene Domains bekommen (einfach als weitere Custom Domain an diesen Worker hängen).
 import reviewApp from './review-app/index.js';
-import { Env, hmac } from './util';
+import { Env, hmac, signKey } from './util';
 
 export function portalEnabled(env: Env) {
   return !!env.RDB;
@@ -23,7 +23,7 @@ export function isPortalHost(env: Env, req: Request) {
 
 /** Gemeinsames internes Geheimnis für die signierte Übergabe CRM ⇄ Portal (ohne Konfiguration) */
 export async function internalSecret(env: Env) {
-  return env.REVIEW_WEBHOOK_SECRET || (await hmac(env.ENCRYPTION_KEY, 'devunox-review-intern'));
+  return env.REVIEW_WEBHOOK_SECRET || (await hmac(signKey(env), 'devunox-review-intern'));
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
