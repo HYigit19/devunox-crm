@@ -36,17 +36,29 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 /** Statische Dateien des Portals liegen im CRM-Build unter /review/ (Schriften teilen sich beide unter /fonts/). */
 function portalAssets(env: Env) {
+  // Der Asset-Dienst leitet z. B. /review/index.html → /review/ um. Solche Umleitungen intern auflösen,
+  // sonst landet der Browser in einer Umleitungsschleife.
+  async function asset(origin: string, path: string, req?: Request) {
+    let url = new URL(path, origin).toString();
+    for (let i = 0; i < 4; i++) {
+      const res = await env.ASSETS.fetch(new Request(url, { method: req?.method === 'HEAD' ? 'HEAD' : 'GET', headers: req?.headers }));
+      const loc = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && loc) { url = new URL(loc, url).toString(); continue; }
+      return res;
+    }
+    return new Response('Not found', { status: 404 });
+  }
   return {
     async fetch(req: Request) {
       const u = new URL(req.url);
       let p = u.pathname;
-      if (p === '/' || p === '') p = '/index.html';
-      const target = p.startsWith('/fonts/') ? p : `/review${p}`;
-      let res = await env.ASSETS.fetch(new Request(new URL(target, u.origin).toString(), { method: req.method, headers: req.headers }));
+      if (p === '/' || p === '' || p === '/index.html') p = '/index.html';
+      const target = p === '/index.html' ? '/review/' : p.startsWith('/fonts/') ? p : `/review${p}`;
+      let res = await asset(u.origin, target, req);
       const isHtml = (res.headers.get('content-type') || '').includes('text/html');
       // Unbekannte Pfade → Portal-Startseite (das Portal nutzt Hash-Routen)
       if (res.status === 404 || (isHtml && p !== '/index.html')) {
-        res = await env.ASSETS.fetch(new Request(new URL('/review/index.html', u.origin).toString(), { method: 'GET' }));
+        res = await asset(u.origin, '/review/');
         p = '/index.html';
       }
       const out = new Response(res.body, res);
