@@ -5,11 +5,15 @@ import { crmRoutes } from './crm';
 import { quoteRoutes } from './quotes';
 import { campaignRoutes } from './campaigns';
 import { rfqRoutes, techRoutes } from './rfq';
-import { taskRoutes, projectRoutes, docRoutes } from './work';
+import { taskRoutes, projectRoutes, docRoutes, storeDocument } from './work';
 import { reviewHook } from './review';
 import { timeRoutes, insightRoutes } from './insights';
 import { runAgent } from './ai';
 import { signRoutes } from './sign';
+import { dmsRoutes, shareRoutes, purgeOldTrash } from './dms';
+import { isPortalHost, portalEnabled, portalFetch } from './portal';
+import { feedbackRoutes } from './feedback';
+import { clientRoutes, runOps } from './clients';
 import { getAccessToken, upcomingEvents, GoogleError } from './google';
 
 const app = new Hono<AppEnv>();
@@ -22,6 +26,7 @@ app.onError((err, c) => {
 
 app.route('/auth', authRoutes);
 app.route('/hooks', reviewHook);
+app.route('/s', shareRoutes); // öffentliche Freigabelinks (ohne Login)
 
 // ---------- Öffentliche Abmeldung (List-Unsubscribe, One-Click) ----------
 async function unsubscribe(env: Env, token: string) {
@@ -59,13 +64,39 @@ app.post('/u/:token', async (c) =>
 const api = new Hono<AppEnv>();
 api.use('*', requireAuth);
 
+// Benutzerhandbuch: wird nach jedem Update automatisch in „Meine Ablage / Handbuch“ abgelegt (neue Fassung = neue Version)
+const GUIDE = { version: '2026-11-03', file: 'devunox_CRM_Benutzerhandbuch.pdf' };
+async function ensureGuide(env: Env) {
+  try {
+    const cur = await env.DB.prepare(`SELECT value FROM settings WHERE key = 'guide_version'`).first<{ value: string }>();
+    if (cur?.value === GUIDE.version) return;
+    const res = await env.ASSETS.fetch(new Request(`https://assets.local/docs/${GUIDE.file}`));
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('pdf')) return;
+    await storeDocument(env, { company_id: null, folder: '/Handbuch/', name: GUIDE.file, data: await res.arrayBuffer(), mime: 'application/pdf', source: 'guide' });
+    await env.DB.prepare(`INSERT INTO settings (key, value) VALUES ('guide_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).bind(GUIDE.version).run();
+  } catch (e) {
+    console.error('Handbuch', e);
+  }
+}
+
+async function userRole(env: Env, id: string): Promise<'admin' | 'member'> {
+  try {
+    const r = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(id).first<{ role: string }>();
+    return r?.role === 'member' ? 'member' : 'admin';
+  } catch {
+    return 'admin'; // Spalte fehlt noch (Migration 0009)
+  }
+}
+
 api.get('/me', async (c) => {
+  c.executionCtx.waitUntil(ensureGuide(c.env));
   const u = await c.env.DB.prepare('SELECT scopes, refresh_token_enc IS NOT NULL AS google, google_email, password_hash IS NOT NULL AS has_password, password_temp FROM users WHERE id = ?').bind(c.get('user').id).first<any>();
-  return c.json({ ...c.get('user'), google: !!u?.google, google_email: u?.google_email || '', has_password: !!u?.has_password, must_change_password: !!u?.password_temp, scopes: u?.scopes || '', ai: !!c.env.ANTHROPIC_API_KEY, review: !!(c.env.REVIEW_URL && c.env.REVIEW_WEBHOOK_SECRET), review_url: c.env.REVIEW_URL || '', model: c.env.AI_MODEL || 'claude-sonnet-5-5' });
+  return c.json({ ...c.get('user'), role: await userRole(c.env, c.get('user').id), google: !!u?.google, google_email: u?.google_email || '', has_password: !!u?.has_password, must_change_password: !!u?.password_temp, scopes: u?.scopes || '', ai: !!c.env.ANTHROPIC_API_KEY, review: portalEnabled(c.env) || !!(c.env.REVIEW_URL && c.env.REVIEW_WEBHOOK_SECRET), review_url: c.env.REVIEW_URL || '', portal: portalEnabled(c.env), model: c.env.AI_MODEL || 'claude-sonnet-5-5' });
 });
 
 api.get('/settings', async (c) => c.json(await getSettings(c.env.DB)));
 api.put('/settings', async (c) => {
+  if ((await userRole(c.env, c.get('user').id)) !== 'admin') return c.json({ error: 'Nur Administratoren können Einstellungen ändern.' }, 403);
   const body = await c.req.json<Record<string, string>>();
   const allowed = Object.fromEntries(Object.entries(body).filter(([k]) => k in DEFAULT_SETTINGS));
   await setSettings(c.env.DB, allowed);
@@ -152,19 +183,29 @@ api.route('/quotes', quoteRoutes);
 api.route('/rfq', rfqRoutes);
 api.route('/tasks', taskRoutes);
 api.route('/projects', projectRoutes);
+api.route('/documents', dmsRoutes);
 api.route('/documents', docRoutes);
 api.route('/time', timeRoutes);
 api.route('/', insightRoutes);
 api.route('/campaigns', campaignRoutes);
 api.route('/sign', signRoutes);
+api.route('/feedback', feedbackRoutes);
+api.route('/clients', clientRoutes);
 
 app.route('/api', api);
 
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default {
-  fetch: app.fetch,
+  // Hostname entscheidet: CRM oder Kundenportal (ehemals devunox Review)
+  fetch(req: Request, env: Env, ctx: ExecutionContext) {
+    if (isPortalHost(env, req)) return portalFetch(env, req, ctx);
+    return app.fetch(req, env, ctx);
+  },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runAgent(env));
+    ctx.waitUntil(purgeOldTrash(env).catch((e) => console.error('Papierkorb', e)));
+    ctx.waitUntil(runOps(env).catch((e) => console.error('Betrieb', e)));
+    ctx.waitUntil(ensureGuide(env));
   },
 } satisfies ExportedHandler<Env>;

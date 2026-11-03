@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { api } from '../api';
-import { Badge, COUNTRIES, Empty, Field, Modal, PageHead, QUOTE_STATUS, Spinner, confirmDel, fmtDate, fmtMoney, fullName, go, stageLabel, useAction, useForm, useLoad } from '../components';
+import { Badge, COUNTRIES, Empty, Field, Modal, PageHead, QUOTE_STATUS, Spinner, confirmDel, fmtDate, fmtDateTime, fmtMoney, fullName, go, stageLabel, useAction, useForm, useLoad } from '../components';
+import { FB_STATUS, FeedbackDrawer, PortalAccessCard } from './Feedback';
+import { CompanyContracts, CompanySystems } from './Systems';
+import { OwnerSelect } from './Cockpit';
 import { Activities } from './shared';
 import { ContactForm } from './Contacts';
 import { DealForm } from './Pipeline';
@@ -99,12 +102,37 @@ export function CompaniesList() {
   );
 }
 
+function CompanyPortal({ id, contacts }: { id: string; contacts: any[] }) {
+  const [list, reload] = useLoad<any[]>(`/feedback?company_id=${id}`);
+  const [open, setOpen] = useState<number | null>(null);
+  return (
+    <div className="grid side">
+      <div className="card flush">
+        <div className="card-head"><h2>Feedback dieses Kunden</h2><a className="btn sm ghost" href="#/feedback">Alle →</a></div>
+        {!list ? <div style={{ padding: 20 }}><Spinner /></div> : list.length === 0 ? <Empty title="Noch kein Feedback" text="Feedback aus dem Kundenportal erscheint hier und als Aufgabe." /> : (
+          <div className="table-wrap"><table><tbody>
+            {list.map((x) => (
+              <tr key={x.id} className="click" onClick={() => setOpen(x.id)}>
+                <td style={{ width: 70 }}>{x.screenshot_url ? <img src={x.screenshot_url} alt="" style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6, display: 'block' }} /> : <b>#{x.no}</b>}</td>
+                <td><b>#{x.no} {x.title}</b><div className="muted" style={{ fontSize: 12 }}>{x.project_name} · {fmtDateTime(x.last_activity_at)}</div></td>
+                <td className="num"><span className={`badge ${FB_STATUS[x.status]?.[1] || 'grey'}`}>{FB_STATUS[x.status]?.[0]}</span></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        )}
+      </div>
+      <PortalAccessCard companyId={id} contacts={contacts} />
+      {open && <FeedbackDrawer id={open} onClose={() => setOpen(null)} onChanged={reload} />}
+    </div>
+  );
+}
+
 export function CompanyDetail({ id }: { id: string }) {
   const [c, reload] = useLoad<any>(`/companies/${id}`);
   const [edit, setEdit] = useState(false);
   const [newContact, setNewContact] = useState(false);
   const [newDeal, setNewDeal] = useState(false);
-  const [tab, setTab] = useState<'file' | 'overview' | 'projects' | 'tasks' | 'docs' | 'time'>('file');
+  const [tab, setTab] = useState<'file' | 'overview' | 'projects' | 'tasks' | 'docs' | 'time' | 'portal' | 'systems' | 'contracts'>(() => (new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') as any) || 'file');
   const [newProject, setNewProject] = useState(false);
   const [projects, reloadProjects] = useLoad<any[]>(`/projects?company_id=${id}`);
   const { busy, run } = useAction();
@@ -127,6 +155,7 @@ export function CompanyDetail({ id }: { id: string }) {
         sub={[c.industry, [c.city, c.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
         actions={
           <>
+            <OwnerSelect company={c} />
             <button className="btn" onClick={() => setEdit(true)}>Bearbeiten</button>
             <button className="btn" onClick={() => setNewDeal(true)}>+ Deal</button>
             <button className="btn primary" disabled={!!busy} onClick={newQuote}>+ Angebot</button>
@@ -138,6 +167,9 @@ export function CompanyDetail({ id }: { id: string }) {
         <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>Kontakte & Angebote</button>
         <button className={tab === 'projects' ? 'active' : ''} onClick={() => setTab('projects')}>Projekte <span className="n">{projects?.length ?? ''}</span></button>
         <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Aufgaben</button>
+        <button className={tab === 'portal' ? 'active' : ''} onClick={() => setTab('portal')}>Kundenportal</button>
+        <button className={tab === 'systems' ? 'active' : ''} onClick={() => setTab('systems')}>Systeme & Abos</button>
+        <button className={tab === 'contracts' ? 'active' : ''} onClick={() => setTab('contracts')}>Verträge & Betrieb</button>
         <button className={tab === 'docs' ? 'active' : ''} onClick={() => setTab('docs')}>Dokumente</button>
         <button className={tab === 'time' ? 'active' : ''} onClick={() => setTab('time')}>Zeiten</button>
       </div>
@@ -146,11 +178,14 @@ export function CompanyDetail({ id }: { id: string }) {
       {tab === 'projects' && (
         <div className="stack">
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button className="btn primary" onClick={() => setNewProject(true)}>+ Projekt</button></div>
-          {projects && projects.length ? <ProjectCards list={projects} /> : <div className="card"><Empty title="Keine Projekte" text="Projekte bündeln Aufgaben, Review-Feedback und Dokumente." /></div>}
+          {projects && projects.length ? <ProjectCards list={projects} /> : <div className="card"><Empty title="Keine Projekte" text="Projekte bündeln Aufgaben, Kunden-Feedback und Dokumente." /></div>}
         </div>
       )}
       {tab === 'tasks' && <TaskBoard filter={`company_id=${id}`} companyId={id} />}
       {tab === 'docs' && <div className="card"><DocBrowser companyId={id} /></div>}
+      {tab === 'portal' && <CompanyPortal id={id} contacts={c.contacts} />}
+      {tab === 'systems' && <CompanySystems companyId={id} />}
+      {tab === 'contracts' && <CompanyContracts companyId={id} />}
       {tab === 'overview' && <div className="grid side">
         <div className="stack">
           <div className="card">
@@ -289,9 +324,9 @@ function CustomerFile({ id, onTab }: { id: string; onTab: (t: string) => void })
       </div>
       <div className="stack">
         <div className="card custno-card">
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.7)', letterSpacing: '.12em', textTransform: 'uppercase' }}>Kundennummer</div>
+          <div className="muted" style={{ fontSize: 11.5, letterSpacing: '.12em', textTransform: 'uppercase' }}>Kundennummer</div>
           <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-.02em' }}>{d.company.customer_no || '–'}</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.75)' }}>Kunde seit {fmtDate(d.company.created_at)}</div>
+          <div className="muted" style={{ fontSize: 13 }}>Kunde seit {fmtDate(d.company.created_at)}</div>
         </div>
         <div className="grid c2" style={{ gap: 12 }}>
           <div className="card kpi" style={{ padding: 16 }}><div className="label">Umsatz gewonnen</div><div className="value" style={{ fontSize: 20 }}>{fmtMoney(st.won)}</div><div className="meta">{st.quotes} Angebote · {st.open_quotes} offen</div></div>

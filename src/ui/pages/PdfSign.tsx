@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api';
 import { Empty, Field, Modal, PageHead, Spinner, fmtDate, useAction, useLoad, useToast } from '../components';
 import { STAMP_H, STAMP_W, stampSvg, svgToPng } from '../stamp';
+import { pdfjs } from '../pdfjs';
 
 // ======================================================================= Unterschrift & Stempel
 
@@ -202,10 +203,8 @@ export function PdfEditor({ title, load, onSave, onClose }: { title: string; loa
         const buf = new Uint8Array(await load());
         if (off) return;
         setBytes(buf);
-        const pdfjs = await import('pdfjs-dist');
-        const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-        const doc = await pdfjs.getDocument({ data: buf.slice() }).promise;
+        const lib = await pdfjs();
+        const doc = await lib.getDocument({ data: buf.slice() }).promise;
         const infos: PageInfo[] = [];
         for (let i = 1; i <= doc.numPages; i++) {
           const p = await doc.getPage(i);

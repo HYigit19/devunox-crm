@@ -53,7 +53,24 @@ Läuft auf Cloudflare (Worker + D1 + R2 EU) und nutzt Google Workspace und Claud
   - Bounces werden erkannt, Abmeldelink nach RFC 8058 (One-Click)
   - Rechtsschutz: Kontakte in EU/DACH/UK werden nur mit Einwilligung oder als Bestandskunde angeschrieben
 
-## devunox Review ↔ CRM
+
+## Neu: Kundenmanagement, Kundenportal im CRM, DMS (11/2026)
+
+Das ausführliche **Benutzerhandbuch mit Screenshots** liegt unter `src/ui/public/docs/devunox_CRM_Benutzerhandbuch.pdf` und wird nach jedem Update automatisch in **Dokumente → Meine Ablage → Handbuch** abgelegt.
+
+- **Kundenportal im CRM (ehemals devunox Review):** Der Review-Code läuft jetzt in diesem Worker (`src/worker/review-app/`, Oberfläche `src/ui/public/review/`). Er nutzt die bestehende Datenbank `devunox-review-db` (Binding `RDB`) und den Bucket `devunox-review-dateien` (`RFILES`) – alle Daten bleiben erhalten. Welche Oberfläche ausgeliefert wird, entscheidet der Hostname (`CRM_HOSTS` = CRM, alle anderen Adressen = Kundenportal). Synchronisation CRM ⇄ Portal läuft intern, ohne Webhook-Secret.
+  - Mehrere Personen je Kunde, Recht „darf Mehraufwand freigeben“, Freigabe von Mehraufwand (Change Requests) im Portal.
+  - Seite **Kunden-Feedback** und Feedback-Ansicht in jeder Aufgabe (Screenshot, Verlauf, Antwort an den Kunden).
+- **Kunden-Cockpit:** Health-Score je Kunde, MRR, Marge, Stundenkontingente, Warnungen.
+- **Kundensysteme:** Systeme & Hosting (devunox Cloud, On-Premise, AWS/Azure/…), Überwachung alle 15 Minuten, Releases, Abos & Abrechnung, Stundenkontingente, Lizenzen (Ed25519-signiert), Verträge & Fristen, Onboarding/Offboarding-Checklisten, Zugangsdaten-Tresor (verschlüsselt, protokolliert), Monatsberichte (PDF DE/EN).
+- **Team:** Rollen Admin/Mitarbeiter, Betreuer je Kunde.
+- **DMS:** Meine Ablage, Zuletzt, Favoriten, Geteilt, Papierkorb (30 Tage), Versionen, Vorschau, Freigabelinks (Ablauf, Passwort, `/s/…`), ZIP-Download, Kopieren/Verschieben zwischen Ablagen.
+
+**Nach dem Update einmalig:**
+1. `npx wrangler d1 migrations apply DB --remote` (0006–0009). Ohne die Updates laufen die bisherigen Funktionen weiter; neue Bereiche zeigen einen Hinweis.
+2. Custom Domain `project.review.devunox.ai` im Dashboard vom Worker `devunox-review` entfernen und beim Worker `devunox-crm` hinzufügen. Danach kann der alte Review-Worker gelöscht werden. Weitere Kunden-Domains einfach zusätzlich an `devunox-crm` hängen.
+
+## devunox Review ↔ CRM (alte, getrennte Variante)
 
 So funktioniert die Verbindung:
 - **Aus dem CRM anlegen:** Im Projekt auf „In devunox Review anlegen“ klicken. Das legt in Review den Kunden mit seiner Kundennummer an, dazu den Feedback-Zugang für den Ansprechpartner und das Projekt.

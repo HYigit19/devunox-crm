@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { AppEnv, Env, insertRow, pick, uid, updateRow } from './util';
 import { getAccessToken, createEvent } from './google';
 import { pushTaskStatusToReview, connectProjectToReview } from './review';
+import { addVersion, dmsReady, trashDocuments } from './dms';
 
 // ======================================================================= Kunden (Kundennummer + Standardordner)
 
@@ -254,10 +255,13 @@ export async function storeDocument(
   const size = o.data instanceof Uint8Array ? o.data.byteLength : (o.data as ArrayBuffer).byteLength;
   const folder = normFolder(o.folder);
   // gleichnamige Datei im selben Ordner ersetzen (z. B. aktualisiertes Angebot)
-  const old = await env.DB.prepare(`SELECT id, r2_key FROM documents WHERE COALESCE(company_id,'') = ? AND COALESCE(project_id,'') = ? AND folder = ? AND name = ?`)
+  const old = await env.DB.prepare(`SELECT id, r2_key, mime, size, uploaded_by FROM documents WHERE COALESCE(company_id,'') = ? AND COALESCE(project_id,'') = ? AND folder = ? AND name = ?`)
     .bind(o.company_id || '', o.project_id || '', folder, o.name)
     .first<any>();
   if (old) {
+    // DMS: alte Fassung als Version behalten, Dokument-ID (Tags, Favorit, Freigaben) bleibt gleich
+    const kept = await addVersion(env, { ...old, name: o.name }, { r2_key: key, mime: o.mime, size, source: o.source, userId: o.userId });
+    if (kept) return kept;
     await env.DOCS.delete(old.r2_key);
     await env.DB.prepare('DELETE FROM documents WHERE id = ?').bind(old.id).run();
   }
@@ -279,7 +283,10 @@ async function ensureFolders(env: Env, company: string | null, project: string |
 docRoutes.get('/', async (c) => {
   const { company, project } = scope(c);
   const general = c.req.query('general') === '1';
+  const recent = c.req.query('recent') === '1';
+  const starred = c.req.query('starred') === '1';
   const q = c.req.query('q');
+  const dms = await dmsReady(c.env);
   const where: string[] = [];
   const args: unknown[] = [];
   if (general) where.push('d.company_id IS NULL AND d.project_id IS NULL');
@@ -292,16 +299,23 @@ docRoutes.get('/', async (c) => {
     args.push(project);
   }
   if (q) {
-    where.push('(d.name LIKE ? OR d.tags LIKE ?)');
-    args.push(`%${q}%`, `%${q}%`);
+    where.push('(d.name LIKE ? OR d.tags LIKE ? OR co.name LIKE ? OR co.customer_no LIKE ?)');
+    args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
+  if (starred && dms) where.push('d.id IN (SELECT document_id FROM document_stars)');
+  const extra = dms
+    ? `, (SELECT 1 FROM document_stars st WHERE st.document_id = d.id) AS starred,
+         (SELECT COUNT(*) FROM document_versions v WHERE v.document_id = d.id) AS versions,
+         (SELECT COUNT(*) FROM document_shares sh WHERE sh.document_id = d.id AND sh.revoked = 0) AS shares`
+    : '';
   const { results: files } = await c.env.DB.prepare(
-    `SELECT d.id, d.company_id, d.project_id, d.folder, d.name, d.mime, d.size, d.tags, d.source, d.created_at, d.updated_at, co.name AS company_name, co.customer_no, p.name AS project_name
+    `SELECT d.id, d.company_id, d.project_id, d.folder, d.name, d.mime, d.size, d.tags, d.source, d.created_at, d.updated_at, co.name AS company_name, co.customer_no, p.name AS project_name${extra}
      FROM documents d LEFT JOIN companies co ON co.id = d.company_id LEFT JOIN projects p ON p.id = d.project_id
-     ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY d.folder, d.name COLLATE NOCASE LIMIT 5000`,
+     ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${recent ? 'COALESCE(d.updated_at, d.created_at) DESC' : 'd.folder, d.name COLLATE NOCASE'} LIMIT ${recent ? 60 : 5000}`,
   )
     .bind(...args)
     .all();
+  if (recent || starred) return c.json({ files, folders: [], dms });
   const fw: string[] = [];
   const fa: unknown[] = [];
   if (general) fw.push('company_id IS NULL AND project_id IS NULL');
@@ -319,7 +333,7 @@ docRoutes.get('/', async (c) => {
     const parts = f.folder.split('/').filter(Boolean);
     parts.forEach((_: string, i: number) => all.add(`/${parts.slice(0, i + 1).join('/')}/`));
   }
-  return c.json({ files, folders: [...all].sort() });
+  return c.json({ files, folders: [...all].sort(), dms });
 });
 
 docRoutes.post('/upload', async (c) => {
@@ -375,12 +389,9 @@ docRoutes.post('/folders/delete', async (c) => {
   const p = normFolder(path);
   if (p === '/') return c.json({ error: 'Ungültig' }, 400);
   const sc = `COALESCE(company_id,'') = ? AND COALESCE(project_id,'') = ?`;
-  const { results } = await c.env.DB.prepare(`SELECT r2_key FROM documents WHERE ${sc} AND folder LIKE ?`).bind(company_id || '', project_id || '', p + '%').all<any>();
-  for (let i = 0; i < results.length; i += 900) await c.env.DOCS.delete(results.slice(i, i + 900).map((r) => r.r2_key));
-  await c.env.DB.batch([
-    c.env.DB.prepare(`DELETE FROM documents WHERE ${sc} AND folder LIKE ?`).bind(company_id || '', project_id || '', p + '%'),
-    c.env.DB.prepare(`DELETE FROM folders WHERE ${sc} AND path LIKE ?`).bind(company_id || '', project_id || '', p + '%'),
-  ]);
+  const { results } = await c.env.DB.prepare(`SELECT id FROM documents WHERE ${sc} AND folder LIKE ?`).bind(company_id || '', project_id || '', p + '%').all<any>();
+  await trashDocuments(c.env, results.map((r) => r.id), c.get('user').id);
+  await c.env.DB.prepare(`DELETE FROM folders WHERE ${sc} AND path LIKE ?`).bind(company_id || '', project_id || '', p + '%').run();
   return c.json({ deleted: results.length });
 });
 
@@ -396,15 +407,21 @@ docRoutes.put('/:id', async (c) => {
 });
 
 docRoutes.post('/bulk', async (c) => {
-  const { ids, action, folder } = await c.req.json<{ ids: string[]; action: 'delete' | 'move'; folder?: string }>();
+  const { ids, action, folder, company_id } = await c.req.json<{ ids: string[]; action: 'delete' | 'move'; folder?: string; company_id?: string | null }>();
   if (!ids?.length) return c.json({ ok: true });
   const ph = ids.map(() => '?').join(',');
   if (action === 'delete') {
-    const { results } = await c.env.DB.prepare(`SELECT r2_key FROM documents WHERE id IN (${ph})`).bind(...ids).all<any>();
-    if (results.length) await c.env.DOCS.delete(results.map((r) => r.r2_key));
-    await c.env.DB.prepare(`DELETE FROM documents WHERE id IN (${ph})`).bind(...ids).run();
+    await trashDocuments(c.env, ids, c.get('user').id);
   } else if (action === 'move') {
-    await c.env.DB.prepare(`UPDATE documents SET folder = ?, updated_at = datetime('now') WHERE id IN (${ph})`).bind(normFolder(folder), ...ids).run();
+    const target = normFolder(folder);
+    if (company_id !== undefined) {
+      // in eine andere Ablage verschieben („__general“ = Meine Ablage)
+      const co = company_id === '__general' ? null : company_id || null;
+      await c.env.DB.prepare(`UPDATE documents SET folder = ?, company_id = ?, project_id = NULL, updated_at = datetime('now') WHERE id IN (${ph})`).bind(target, co, ...ids).run();
+      if (target !== '/') await ensureFolders(c.env, co, null, target);
+    } else {
+      await c.env.DB.prepare(`UPDATE documents SET folder = ?, updated_at = datetime('now') WHERE id IN (${ph})`).bind(target, ...ids).run();
+    }
   }
   return c.json({ ok: true });
 });

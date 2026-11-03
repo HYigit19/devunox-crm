@@ -18,16 +18,27 @@ import { ProjectsList, ProjectDetail } from './pages/Projects';
 import { DocumentsPage } from './pages/Documents';
 import { TimePage, TimerBadge } from './pages/Time';
 import { PdfPage } from './pages/PdfSign';
+import { FeedbackPage } from './pages/Feedback';
+import { SystemsPage } from './pages/Systems';
+import { CockpitPage } from './pages/Cockpit';
 
-export type Me = { id: string; email: string; name: string; picture?: string; google: boolean; google_email: string; has_password: boolean; must_change_password: boolean; ai: boolean; review: boolean; review_url: string; model: string; scopes: string };
+export type Me = { role?: 'admin' | 'member'; id: string; email: string; name: string; picture?: string; google: boolean; google_email: string; has_password: boolean; must_change_password: boolean; ai: boolean; review: boolean; review_url: string; model: string; scopes: string };
 
 const NAV: { group: string; items: { path: string; label: string; icon: string; badge?: 'tasks' }[] }[] = [
   { group: '', items: [{ path: '/', label: 'Übersicht', icon: I.home }] },
   {
+    group: 'Kunden',
+    items: [
+      { path: '/cockpit', label: 'Kunden-Cockpit', icon: I.pulse },
+      { path: '/companies', label: 'Firmen', icon: I.company },
+      { path: '/systems', label: 'Kundensysteme', icon: I.server },
+      { path: '/feedback', label: 'Kunden-Feedback', icon: I.feedback },
+    ],
+  },
+  {
     group: 'Vertrieb',
     items: [
       { path: '/pipeline', label: 'Pipeline', icon: I.pipeline },
-      { path: '/companies', label: 'Firmen', icon: I.company },
       { path: '/contacts', label: 'Kontakte', icon: I.contacts },
       { path: '/quotes', label: 'Angebote', icon: I.quote },
       { path: '/import', label: 'Excel → Angebot', icon: I.excel },
@@ -71,7 +82,7 @@ function LoginShell({ children }: { children: React.ReactNode }) {
           <i style={{ width: 245, background: '#953A1B' }} />
         </div>
         <h2>Angebote, Kunden, Projekte und Aufgaben – in einem Werkzeug.</h2>
-        <p>Mit KI-Angeboten aus Excel, Dokumentenablage je Kunde und Feedback direkt aus devunox Review.</p>
+        <p>Mit KI-Angeboten aus Excel, Dokumentenablage je Kunde und Kundenportal mit Feedback als Aufgaben.</p>
       </div>
       <div className="login-side">
         <div className="login-card">
@@ -302,6 +313,15 @@ function App() {
       break;
     case 'documents':
       page = <DocumentsPage />;
+      break;
+    case 'cockpit':
+      page = <CockpitPage />;
+      break;
+    case 'systems':
+      page = <SystemsPage />;
+      break;
+    case 'feedback':
+      page = <FeedbackPage />;
       break;
     case 'pdf':
       page = <PdfPage />;
