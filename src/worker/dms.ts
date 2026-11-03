@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { AppEnv, Env, hashPassword, hmac, insertRow, toBase64Url, uid, verifyPassword } from './util';
+import { AppEnv, Env, hashPassword, hmac, signKey, insertRow, toBase64Url, uid, verifyPassword } from './util';
 
 // ======================================================================= Dokumentenmanagement (DMS)
 // Papierkorb, Versionen, Favoriten, Freigabelinks, Kopieren, Speicherübersicht.
@@ -297,7 +297,7 @@ const cookieName = (token: string) => `dvx_s_${token.slice(0, 12)}`;
 async function unlocked(c: any, s: any) {
   if (!s.password_hash) return true;
   const v = getCookie(c, cookieName(s.token));
-  return !!v && v === (await hmac(c.env.ENCRYPTION_KEY, `share:${s.token}:${s.password_hash.slice(-16)}`));
+  return !!v && v === (await hmac(signKey(c.env), `share:${s.token}:${s.password_hash.slice(-16)}`));
 }
 const lockPage = (c: any, wrong = false) =>
   c.html(page('Geschützte Freigabe', `<div class="card"><h1>Passwort erforderlich</h1><div class="muted">Diese Freigabe ist geschützt. / This share is password protected.</div>
@@ -333,7 +333,7 @@ shareRoutes.post('/:token', async (c) => {
   if (!s) return c.html(page('Link ungültig', `<div class="card"><h1>Link nicht verfügbar</h1><div class="muted">${esc(err)}</div></div>`), 404);
   const form = await c.req.formData();
   if (!(await verifyPassword(String(form.get('password') || ''), s.password_hash))) return lockPage(c, true);
-  setCookie(c, cookieName(s.token), await hmac(c.env.ENCRYPTION_KEY, `share:${s.token}:${s.password_hash.slice(-16)}`), { path: `/s/${s.token}`, httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 86400 });
+  setCookie(c, cookieName(s.token), await hmac(signKey(c.env), `share:${s.token}:${s.password_hash.slice(-16)}`), { path: `/s/${s.token}`, httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 86400 });
   return c.redirect(`/s/${s.token}`, 303);
 });
 

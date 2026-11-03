@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AppEnv, Env, getSettings, setSettings, hmac, DEFAULT_SETTINGS } from './util';
+import { AppEnv, Env, getSettings, setSettings, hmac, signKey, DEFAULT_SETTINGS } from './util';
 import { authRoutes, requireAuth } from './auth';
 import { crmRoutes } from './crm';
 import { quoteRoutes } from './quotes';
@@ -31,7 +31,7 @@ app.route('/s', shareRoutes); // öffentliche Freigabelinks (ohne Login)
 // ---------- Öffentliche Abmeldung (List-Unsubscribe, One-Click) ----------
 async function unsubscribe(env: Env, token: string) {
   const [id, sig] = token.split('.');
-  if (!id || !sig || sig !== (await hmac(env.ENCRYPTION_KEY, id))) return false;
+  if (!id || !sig || sig !== (await hmac(signKey(env), id))) return false;
   await env.DB.batch([
     env.DB.prepare(`UPDATE contacts SET consent = 'opt_out', consent_note = 'Über Abmeldelink abgemeldet', updated_at = datetime('now') WHERE id = ?`).bind(id),
     env.DB.prepare(`UPDATE enrollments SET status = 'opted_out' WHERE contact_id = ? AND status = 'active'`).bind(id),
